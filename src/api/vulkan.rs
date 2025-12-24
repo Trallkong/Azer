@@ -1,22 +1,23 @@
 use std::sync::Arc;
-use log::{error};
-use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
-use vulkano::command_buffer::{PrimaryAutoCommandBuffer};
-use vulkano::device::physical::PhysicalDevice;
-use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
-use vulkano::format::{Format};
-use vulkano::image::{Image};
-use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
-use vulkano::pipeline::graphics::viewport::Viewport;
-use vulkano::render_pass::{Framebuffer, RenderPass};
-use vulkano::swapchain::{acquire_next_image, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
-use vulkano::{single_pass_renderpass, sync, Validated, VulkanError, VulkanLibrary};
-use vulkano::sync::GpuFuture;
+use log::error;
+use vulkano::{
+    command_buffer::allocator::StandardCommandBufferAllocator,
+    command_buffer::PrimaryAutoCommandBuffer,
+    device::{Device, Queue},
+    format::Format,
+    image::Image,
+    pipeline::graphics::viewport::Viewport,
+    render_pass::{Framebuffer, RenderPass},
+    swapchain::{acquire_next_image, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo},
+    sync,
+    Validated,
+    VulkanError,
+    sync::GpuFuture
+};
 use winit::window::Window;
-use crate::api;
-use crate::api::vulkan_helper::VulkanHelper;
 use crate::core::layer_stack::LayerStack;
 use crate::render::renderer::Renderer;
+use crate::api::vulkan_helper;
 
 pub struct Vulkan {
     pub device: Arc<Device>,
@@ -36,99 +37,38 @@ pub struct Vulkan {
 impl Vulkan {
     pub fn new(window: Arc<Window>) -> Vulkan {
 
-        let library = VulkanLibrary::new()
-            .unwrap_or_else(|err| panic!("无法创建VulkanLibrary: {}",err));
+        let library = vulkan_helper::get_library();
 
-        let required_extensions = Surface::required_extensions(&window)
-            .unwrap_or_else(|err| panic!("获取窗口所需扩展失败: {}", err));
+        let instance = vulkan_helper::get_instance(
+            Arc::clone(&library),
+            Arc::clone(&window)
+        );
 
-        let extensions = InstanceExtensions {
-            ..required_extensions
-        };
+        let surface = vulkan_helper::get_surface(
+            Arc::clone(&instance),
+            Arc::clone(&window)
+        );
 
-        let instance = Instance::new(
-            library.clone(),
-            InstanceCreateInfo {
-                enabled_extensions: extensions,
-                ..InstanceCreateInfo::default()
-            }
-        ).unwrap_or_else(|err| panic!("无法创建Vulkan实例: {}", err));
+        let (device, queue) = vulkan_helper::get_device_and_queue(Arc::clone(&instance));
 
-        let surface = Surface::from_window(instance.clone(), window.clone())
-            .unwrap_or_else(|err| panic!("创建Surface失败: {}", err));
-
-        let mut target_device : Option<Arc<PhysicalDevice>> = None;
-        let mut target_index: Option<u32> = None;
-        // 遍历物理设备搜寻符合要求的设备
-        for physical_device in instance.enumerate_physical_devices().unwrap() {
-            println!("物理设备信息:");
-            println!("设备名称: {}", physical_device.properties().device_name);
-            println!("设备类型: {:?}", physical_device.properties().device_type);
-
-            // 检测是否包含图形队列
-            let required_index = get_required_queue_family_index(
-                physical_device.as_ref(), QueueFlags::GRAPHICS);
-
-            match required_index {
-                Some(index) => {
-                    println!("该设备支持图形队列，被选择为目标物理设备！");
-                    target_device = Some(physical_device);
-                    target_index = Some(index);
-                    break;
-                },
-                None => {
-                    println!("该设备不支持图形队列，跳过！");
-                }
-            }
-        };
-
-        if target_device.is_none() {
-            panic!("没有找到适用于创建设备队列的物理设备！")
-        }
-
-        let queue_create_info = QueueCreateInfo {
-            queue_family_index: target_index.unwrap(),
-            queues: vec![1.0],
-            ..QueueCreateInfo::default()
-        };
-
-        let device_extensions = DeviceExtensions {
-            khr_swapchain: true,
-            ..DeviceExtensions::default()
-        };
-
-        let device_create_info = DeviceCreateInfo {
-            queue_create_infos: vec![queue_create_info],
-            enabled_extensions: device_extensions,
-            ..DeviceCreateInfo::default()
-        };
-
-        let (device, mut queues) = Device::new(target_device.unwrap(), device_create_info)
-            .unwrap_or_else(|err| panic!("创建设备失败: {}",err));
-
-        let queue = queues.next().unwrap();
-
-        let swapchain = api::swapchain::SwapChain::new(
+        let (swapchain, images) = vulkan_helper::get_swapchain_and_images(
             Arc::clone(&device),
             Arc::clone(&surface),
             Arc::clone(&window),
         );
 
-        let (swapchain, images) = (swapchain.swapchain.clone(), swapchain.images.clone());
-
-        let allocator = Arc::new(StandardCommandBufferAllocator::new(
-            device.clone(), StandardCommandBufferAllocatorCreateInfo::default()));
+        let allocator = Arc::new(vulkan_helper::get_command_buffer_allocator(Arc::clone(&device)));
 
         let viewport = Viewport {
             extent: window.clone().inner_size().into(),
             ..Viewport::default()
         };
 
-        let render_pass = create_render_pass(device.clone(), Format::R8G8B8A8_UNORM);
+        let render_pass = vulkan_helper::get_render_pass(device.clone(), Format::R8G8B8A8_UNORM);
 
-        let framebuffers: Vec<Arc<Framebuffer>> = VulkanHelper::create_frame_buffers(
+        let framebuffers: Vec<Arc<Framebuffer>> = vulkan_helper::get_framebuffers(
             images.clone(),
-            render_pass.clone(),
+            Arc::clone(&render_pass),
         );
 
         Vulkan {
@@ -204,7 +144,7 @@ impl Vulkan {
 
             self.swapchain = new_swapchain;
             self.swapchain_images = new_images.clone();
-            self.frame_buffers = VulkanHelper::create_frame_buffers(new_images, self.render_pass.clone());
+            self.frame_buffers = vulkan_helper::get_framebuffers(new_images, self.render_pass.clone());
 
             if self.window_resized {
                 self.window_resized = false;
@@ -221,55 +161,6 @@ impl Vulkan {
             }
         }
     }
-}
-
-/// 判断某个物理设备是否符合需求并返回队列索引
-///
-/// @param physical_device 从枚举获得的物理设备
-///
-/// @param required_flag 所需设备类型的标识
-///
-/// @param required_flag 所需设备类型的标识
-///
-/// @return 设备队列索引（Option包裹）
-///
-fn get_required_queue_family_index(physical_device: &PhysicalDevice, required_flag: QueueFlags) -> Option<u32> {
-    let properties = physical_device.queue_family_properties();
-    for (i, properties) in properties.iter().enumerate() {
-        if properties.queue_flags.contains(required_flag) {
-            return Some(i as u32);
-        }
-    }
-    None
-}
-
-
-/// 创建一个RenderPass（Arc包裹）
-///
-/// @param device 可用设备
-///
-/// @param format 格式
-///
-/// @return RenderPass（Arc包裹）
-///
-fn create_render_pass(device: Arc<Device>, format: Format) -> Arc<RenderPass> {
-    let render_pass = single_pass_renderpass!(
-        device.clone(),
-        attachments: {
-            foo: {
-                format: format,
-                samples: 1,
-                load_op: Clear,
-                store_op: Store,
-            },
-        },
-        pass: {
-            color: [foo],
-            depth_stencil: {},
-        }
-    )
-        .unwrap_or_else(|err| panic!("创建渲染令牌: {}", err));
-    render_pass
 }
 
 /// 创建一组CommandBuffer（Arc包裹）

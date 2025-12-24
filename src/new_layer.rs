@@ -24,7 +24,7 @@ impl Layer for NewLayer {
         // info!("NewLayer physics update");
     }
 
-    fn on_event(&mut self, event: &WindowEvent) {
+    fn on_event(&mut self, _event: &WindowEvent) {
         // info!("{:?}", event);
     }
 

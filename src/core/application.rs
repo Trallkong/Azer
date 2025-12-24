@@ -4,7 +4,6 @@ use log::{warn};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
-use winit::raw_window_handle::{HasRawWindowHandle, HasWindowHandle};
 use winit::window::{Window, WindowId};
 use crate::api::vulkan::Vulkan;
 use crate::core::delta_time::DeltaTime;
