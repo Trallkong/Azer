@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
-use log::{warn};
+use log::{info, warn};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
@@ -75,7 +75,7 @@ impl ApplicationHandler for Application {
         // 事件监听
         match event {
             WindowEvent::CloseRequested => {
-                warn!("检测到点击关闭按钮，开始清理，请不要退出应用！");
+                info!("检测到点击关闭按钮，开始清理，请不要退出应用！");
 
                 // 清理层栈
                 let mut layer_stack = self.layer_stack.take().unwrap();
@@ -83,7 +83,7 @@ impl ApplicationHandler for Application {
                 layer_stack.clear();
 
                 event_loop.exit(); // 关闭事件循环
-                warn!("清理完毕！");
+                info!("清理完毕！");
                 return;
             },
             WindowEvent::RedrawRequested => {
@@ -109,14 +109,14 @@ impl ApplicationHandler for Application {
             WindowEvent::Resized(size) => {
                 let mut vulkan = self.vulkan.take().unwrap();
                 let window = self.window.take().unwrap();
-                if size.width > 0 && size.height > 0 {
-                    vulkan.window_resized = true;
-                    vulkan.recreate_swapchain(
-                        window.clone(),
-                        self.renderer.as_mut().unwrap(),
-                        self.layer_stack.as_mut().unwrap()
-                    );
-                }
+
+                vulkan.window_resized = true;
+                vulkan.recreate_swapchain(
+                    window.clone(),
+                    self.renderer.as_mut().unwrap(),
+                    self.layer_stack.as_mut().unwrap()
+                );
+
                 self.vulkan = Some(vulkan);
                 self.window = Some(window);
 

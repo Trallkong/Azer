@@ -22,7 +22,7 @@ use vulkano::swapchain::{PresentMode, Surface, Swapchain, SwapchainCreateInfo};
 use vulkano::{single_pass_renderpass, VulkanLibrary};
 use winit::window::Window;
 use crate::api::shader::Shaders;
-use crate::render::render_triangle::Vertex2D;
+use crate::render::vertex::Vertex2D;
 
 /// 获取 VulkanLibrary
 pub fn get_library() -> Arc<VulkanLibrary> {
@@ -188,61 +188,67 @@ pub fn get_framebuffers(
     framebuffers
 }
 
+/// 获取 GraphicsPipeline
+pub fn get_graphics_pipeline(
+    window: Arc<Window>,
+    device: Arc<Device>,
+    render_pass: Arc<RenderPass>,
+) -> Arc<GraphicsPipeline> {
+    let viewport = Viewport {
+        offset: [0.0, 0.0],
+        extent: window.inner_size().into(),
+        depth_range: 0.0..=1.0,
+    };
+
+    let shaders = Shaders::load(device.clone()).unwrap();
+    let vs = shaders.vs.entry_point("main").unwrap();
+    let fs = shaders.fs.entry_point("main").unwrap();
+
+    let vertex_input_state = Vertex2D::per_vertex()
+        .definition(&vs)
+        .unwrap();
+
+    let stages = [
+        PipelineShaderStageCreateInfo::new(vs),
+        PipelineShaderStageCreateInfo::new(fs),
+    ];
+
+    let layout = PipelineLayout::new(
+        device.clone(),
+        PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
+            .into_pipeline_layout_create_info(device.clone()).unwrap()
+    ).unwrap();
+
+    let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
+
+    let pipeline = GraphicsPipeline::new(
+        device.clone(),
+        None,
+        GraphicsPipelineCreateInfo {
+            stages: stages.into_iter().collect(),
+            vertex_input_state: Some(vertex_input_state),
+            input_assembly_state: Some(InputAssemblyState::default()),
+            viewport_state: Some(ViewportState {
+                viewports: [viewport].into_iter().collect(),
+                ..ViewportState::default()
+            }),
+            rasterization_state: Some(RasterizationState::default()),
+            multisample_state: Some(MultisampleState::default()),
+            color_blend_state: Some(ColorBlendState::with_attachment_states(
+                subpass.num_color_attachments(),
+                ColorBlendAttachmentState::default()
+            )),
+            subpass: Some(subpass.into()),
+            ..GraphicsPipelineCreateInfo::layout(layout)
+        }
+    ).unwrap();
+
+    pipeline
+}
+
 pub struct VulkanHelper;
 
 impl VulkanHelper {
-    pub fn create_graphics_pipeline(window: Arc<Window>, device: Arc<Device>, render_pass: Arc<RenderPass>) -> Arc<GraphicsPipeline>   {
-        let viewport = Viewport {
-            offset: [0.0, 0.0],
-            extent: window.inner_size().into(),
-            depth_range: 0.0..=1.0,
-        };
-
-        let shaders = Shaders::load(device.clone()).unwrap();
-        let vs = shaders.vs.entry_point("main").unwrap();
-        let fs = shaders.fs.entry_point("main").unwrap();
-
-        let vertex_input_state = Vertex2D::per_vertex()
-            .definition(&vs)
-            .unwrap();
-
-        let stages = [
-            PipelineShaderStageCreateInfo::new(vs),
-            PipelineShaderStageCreateInfo::new(fs),
-        ];
-
-        let layout = PipelineLayout::new(
-            device.clone(),
-            PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
-                .into_pipeline_layout_create_info(device.clone()).unwrap()
-        ).unwrap();
-
-        let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
-
-        let pipeline = GraphicsPipeline::new(
-            device.clone(),
-            None,
-            GraphicsPipelineCreateInfo {
-                stages: stages.into_iter().collect(),
-                vertex_input_state: Some(vertex_input_state),
-                input_assembly_state: Some(InputAssemblyState::default()),
-                viewport_state: Some(ViewportState {
-                    viewports: [viewport].into_iter().collect(),
-                    ..ViewportState::default()
-                }),
-                rasterization_state: Some(RasterizationState::default()),
-                multisample_state: Some(MultisampleState::default()),
-                color_blend_state: Some(ColorBlendState::with_attachment_states(
-                    subpass.num_color_attachments(),
-                    ColorBlendAttachmentState::default()
-                )),
-                subpass: Some(subpass.into()),
-                ..GraphicsPipelineCreateInfo::layout(layout)
-            }
-        ).unwrap();
-
-        pipeline
-    }
 
     pub fn create_command_buffers(
         device: Arc<Device>,

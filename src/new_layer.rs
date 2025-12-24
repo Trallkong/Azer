@@ -16,7 +16,7 @@ impl Layer for NewLayer {
     }
 
     fn on_render(&mut self, renderer: &mut Renderer) {
-        info!("NewLayer rendering");
+        renderer.draw_rectangle();
         renderer.draw_triangle();
     }
 

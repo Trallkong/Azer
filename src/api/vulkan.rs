@@ -130,6 +130,10 @@ impl Vulkan {
     }
 
     pub fn recreate_swapchain(&mut self, window: Arc<Window>, renderer: &mut Renderer, layer_stack: &mut LayerStack) {
+        if window.is_minimized().unwrap() {
+            return;
+        }
+
         if self.window_resized || self.recreate_swapchain {
             self.recreate_swapchain = false;
 

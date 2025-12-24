@@ -1,5 +1,8 @@
+use crate::render::render::Render;
+use crate::render::render_rectangle::RenderRectangle;
 use crate::render::render_triangle::RenderTriangle;
 use std::sync::Arc;
+use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::{
     command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo},
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo},
@@ -11,6 +14,7 @@ use winit::window::Window;
 pub struct Renderer {
     cmd_bf_builder: Option<AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>>,
     render_triangle: Box<RenderTriangle>,
+    render_rectangle: Box<RenderRectangle>,
 
     allocator: Arc<StandardCommandBufferAllocator>,
     queue: Arc<Queue>,
@@ -36,14 +40,26 @@ impl Renderer {
                 CommandBufferUsage::MultipleSubmit,
             ).unwrap();
 
+
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(Arc::clone(&device)));
+
         Self {
             cmd_bf_builder: Some(builder),
             render_triangle: Box::new(
                 RenderTriangle::new(
                     Arc::clone(&device),
                     Arc::clone(&window),
-                    Arc::clone(&render_pass)
+                    Arc::clone(&render_pass),
+                    memory_allocator.clone()
                 ),
+            ),
+            render_rectangle: Box::new(
+              RenderRectangle::new(
+                  Arc::clone(&device),
+                  Arc::clone(&window),
+                  Arc::clone(&render_pass),
+                  memory_allocator.clone()
+              )
             ),
             allocator,
             queue,
@@ -104,6 +120,11 @@ impl Renderer {
     pub fn draw_triangle(&mut self) {
         let builder = self.cmd_bf_builder.take().unwrap();
         self.cmd_bf_builder = Some(self.render_triangle.draw(builder));
+    }
+
+    pub fn draw_rectangle(&mut self) {
+        let builder = self.cmd_bf_builder.take().unwrap();
+        self.cmd_bf_builder = Some(self.render_rectangle.draw(builder));
     }
 
     pub fn recreate_pipeline(&mut self) {
