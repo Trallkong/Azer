@@ -1,12 +1,12 @@
+use crate::api::vulkan_helper;
+use crate::render::render::{Render, RenderData};
+use crate::render::vertex::{get_vbo_and_ibo_2d, Vertex2D};
 use std::sync::Arc;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::device::Device;
 use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::render_pass::RenderPass;
 use winit::window::Window;
-use crate::render::render::{Render, RenderData};
-use crate::render::vertex::{get_vbo_and_ibo_2d, Vertex2D};
-use crate::api::vulkan_helper;
 
 pub struct RenderRectangle {
     pub data: RenderData

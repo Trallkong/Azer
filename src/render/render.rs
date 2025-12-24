@@ -1,3 +1,4 @@
+use crate::render::vertex::Vertex2D;
 use std::sync::Arc;
 use vulkano::buffer::Subbuffer;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
@@ -6,7 +7,6 @@ use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::RenderPass;
 use winit::window::Window;
-use crate::render::vertex::Vertex2D;
 
 pub struct RenderData {
     pub graphics_pipeline: Arc<GraphicsPipeline>,

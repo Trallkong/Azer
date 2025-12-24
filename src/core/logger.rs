@@ -1,5 +1,5 @@
-use std::io::Write;
 use chrono::Local;
+use std::io::Write;
 
 pub fn init_logger() {
     env_logger::builder()

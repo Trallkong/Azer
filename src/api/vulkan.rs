@@ -1,5 +1,8 @@
-use std::sync::Arc;
+use crate::api::vulkan_helper;
+use crate::core::layer_stack::LayerStack;
+use crate::render::renderer::Renderer;
 use log::error;
+use std::sync::Arc;
 use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator,
     command_buffer::PrimaryAutoCommandBuffer,
@@ -10,14 +13,11 @@ use vulkano::{
     render_pass::{Framebuffer, RenderPass},
     swapchain::{acquire_next_image, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo},
     sync,
+    sync::GpuFuture,
     Validated,
-    VulkanError,
-    sync::GpuFuture
+    VulkanError
 };
 use winit::window::Window;
-use crate::core::layer_stack::LayerStack;
-use crate::render::renderer::Renderer;
-use crate::api::vulkan_helper;
 
 pub struct Vulkan {
     pub device: Arc<Device>,

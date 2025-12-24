@@ -1,6 +1,6 @@
-pub use winit::event::WindowEvent;
 pub use crate::core::delta_time::DeltaTime;
 use crate::render::renderer::Renderer;
+pub use winit::event::WindowEvent;
 
 pub trait Layer: Send + Sync {
     fn on_ready(&mut self);

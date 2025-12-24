@@ -1,11 +1,11 @@
 mod new_layer;
 
+use crate::new_layer::NewLayer;
+use azer::core::{application::Application, logger};
+use log::info;
 use std::thread;
 use std::time::Duration;
-use log::info;
 use winit::event_loop::{ControlFlow, EventLoop};
-use azer::core::{logger, application::Application};
-use crate::new_layer::NewLayer;
 
 fn main() {
     // 日志模块

@@ -1,8 +1,8 @@
-use log::info;
-use winit::event::WindowEvent;
 use azer::core::delta_time::DeltaTime;
 use azer::core::layer::Layer;
 use azer::render::renderer::Renderer;
+use log::info;
+use winit::event::WindowEvent;
 
 pub struct NewLayer;
 

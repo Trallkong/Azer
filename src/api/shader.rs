@@ -1,7 +1,7 @@
 use std::sync::Arc;
+use vulkano::device::Device;
 use vulkano::shader::ShaderModule;
 use vulkano::{Validated, VulkanError};
-use vulkano::device::Device;
 
 mod vs {
     vulkano_shaders::shader! {
