@@ -19,6 +19,15 @@ use vulkano::{
 };
 use winit::window::Window;
 
+bitflags::bitflags! {
+    pub struct RenderDirty: u32 {
+        const NONE          = 0;
+        const SWAPCHAIN     = 1 << 0;
+        const PIPELINE      = 1 << 1;
+        const COMMAND_BUF   = 1 << 2;
+    }
+}
+
 pub struct Vulkan {
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
@@ -32,6 +41,8 @@ pub struct Vulkan {
     pub recreate_swapchain: bool,
     pub viewport: Viewport,
     pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+
+    pub dirty: RenderDirty,
 }
 
 impl Vulkan {
@@ -84,6 +95,7 @@ impl Vulkan {
             recreate_swapchain: false,
             viewport,
             command_buffer_allocator: allocator,
+            dirty: RenderDirty::NONE,
         }
     }
 
@@ -134,9 +146,7 @@ impl Vulkan {
             return;
         }
 
-        if self.window_resized || self.recreate_swapchain {
-            self.recreate_swapchain = false;
-
+        if self.dirty.contains(RenderDirty::SWAPCHAIN) {
             let new_dimensions = window.clone().inner_size();
 
             let (new_swapchain, new_images) = self.swapchain
@@ -150,19 +160,20 @@ impl Vulkan {
             self.swapchain_images = new_images.clone();
             self.frame_buffers = vulkan_helper::get_framebuffers(new_images, self.render_pass.clone());
 
-            if self.window_resized {
-                self.window_resized = false;
+            self.dirty.remove(RenderDirty::SWAPCHAIN);
+        }
 
-                self.viewport.extent = new_dimensions.into();
+        if self.dirty.contains(RenderDirty::PIPELINE) {
+            renderer.recreate_pipeline();
+            self.dirty.remove(RenderDirty::PIPELINE);
+        }
 
-                renderer.recreate_pipeline();
-
-                self.command_buffers = get_command_buffers(
-                    renderer,
-                    layer_stack,
-                    self.frame_buffers.clone(),
-                );
-            }
+        if self.dirty.contains(RenderDirty::COMMAND_BUF) {
+            self.command_buffers = get_command_buffers(
+                renderer,
+                layer_stack,
+                self.frame_buffers.clone(),
+            );
         }
     }
 }

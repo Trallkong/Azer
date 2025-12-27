@@ -18,7 +18,7 @@ fn main() {
     info!("窗口模块初始化成功！");
 
     let mut app: Application = Application::new();
-    app.push_layer(Box::new(NewLayer));
+    app.push_layer(Box::new(NewLayer::new()));
 
     event_loop.run_app(&mut app).unwrap();
 

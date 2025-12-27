@@ -1,15 +1,21 @@
-use crate::api::shader::Shaders;
+use std::collections::BTreeMap;
+use crate::api::shaders::Shader;
 use crate::render::vertex::Vertex2D;
 use std::sync::Arc;
-use vulkano::buffer::Subbuffer;
+use log::error;
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
+use vulkano::descriptor_set::allocator::{StandardDescriptorSetAllocator, StandardDescriptorSetAllocatorCreateInfo};
+use vulkano::descriptor_set::layout::{DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType};
+use vulkano::descriptor_set::DescriptorSet;
 use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::{Image, ImageUsage};
 use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
@@ -188,11 +194,78 @@ pub fn get_framebuffers(
     framebuffers
 }
 
+pub fn get_descriptor_set_layout(device: Arc<Device>, binding: u32) -> Arc<DescriptorSetLayout> {
+    let layout_binding = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
+
+    let mut bindings = BTreeMap::new();
+    bindings.insert(binding, layout_binding);
+
+    DescriptorSetLayout::new(
+        Arc::clone(&device),
+        DescriptorSetLayoutCreateInfo {
+            bindings,
+            ..DescriptorSetLayoutCreateInfo::default()
+        }
+    ).unwrap_or_else(|e| {
+        error!("创建描述符集布局失败: {}", e);
+        panic!("无法创建描述符集布局: {:?}", e);
+    })
+}
+pub fn get_uniform_buffer<T>(buffer_data: T, allocator: Arc<StandardMemoryAllocator>,) -> Subbuffer<T>
+where T: BufferContents
+{
+    Buffer::from_data(
+        allocator,
+        BufferCreateInfo {
+            usage: BufferUsage::UNIFORM_BUFFER,
+            ..BufferCreateInfo::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..AllocationCreateInfo::default()
+        },
+        buffer_data
+    ).unwrap_or_else(|e| {
+        error!("创建uniform缓冲区失败: {}", e);
+        panic!("无法创建uniform缓冲区: {:?}", e);
+    })
+}
+
+pub fn get_descriptor_set_allocator(device: Arc<Device>) -> Arc<StandardDescriptorSetAllocator> {
+    Arc::new(StandardDescriptorSetAllocator::new(
+        Arc::clone(&device),
+        StandardDescriptorSetAllocatorCreateInfo {
+            set_count: 1,
+            update_after_bind: false,
+            ..StandardDescriptorSetAllocatorCreateInfo::default()
+        }
+    ))
+}
+
+pub fn get_descriptor_set<T>(
+    uniform_buffer: Subbuffer<T>,
+    binding: u32,
+    layout: Arc<DescriptorSetLayout>,
+    allocator: Arc<StandardDescriptorSetAllocator>
+) -> Arc<DescriptorSet>
+where T: BufferContents
+{
+    let write_descriptor_set = vulkano::descriptor_set::WriteDescriptorSet::buffer(binding, uniform_buffer.clone());
+
+    DescriptorSet::new(
+        allocator,
+        layout,
+        [write_descriptor_set],
+        []
+    ).unwrap()
+}
+
 /// 获取 GraphicsPipeline
 pub fn get_graphics_pipeline(
     window: Arc<Window>,
     device: Arc<Device>,
     render_pass: Arc<RenderPass>,
+    shader: Arc<dyn Shader>
 ) -> Arc<GraphicsPipeline> {
     let viewport = Viewport {
         offset: [0.0, 0.0],
@@ -200,18 +273,21 @@ pub fn get_graphics_pipeline(
         depth_range: 0.0..=1.0,
     };
 
-    let shaders = Shaders::load(device.clone()).unwrap();
-    let vs = shaders.vs.entry_point("main").unwrap();
-    let fs = shaders.fs.entry_point("main").unwrap();
+    let vs = shader.vs().entry_point("main").unwrap();
+    let fs = shader.fs().entry_point("main").unwrap();
 
     let vertex_input_state = Vertex2D::per_vertex()
         .definition(&vs)
-        .unwrap();
+        .unwrap_or_else(|e| {
+            error!("获取顶点输入状态失败: {}", e);
+            panic!("获取顶点输入状态失败")
+        });
 
     let stages = [
         PipelineShaderStageCreateInfo::new(vs),
         PipelineShaderStageCreateInfo::new(fs),
     ];
+
 
     let layout = PipelineLayout::new(
         device.clone(),

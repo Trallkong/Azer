@@ -1,4 +1,4 @@
-use crate::api::vulkan::Vulkan;
+use crate::api::vulkan::{RenderDirty, Vulkan};
 use crate::core::delta_time::DeltaTime;
 use crate::core::layer::Layer;
 use crate::core::layer_stack::LayerStack;
@@ -35,10 +35,6 @@ impl ApplicationHandler for Application {
 
         if !self.initialized {
             self.initialized = true;
-            // 初始化各层
-            let mut layer_stack = self.layer_stack.take().unwrap();
-            layer_stack.iter_mut().for_each(|layer| layer.on_ready());
-            self.layer_stack = Some(layer_stack);
 
             // 初始化 Window
             let window_attribute = Window::default_attributes()
@@ -56,21 +52,20 @@ impl ApplicationHandler for Application {
                 Arc::clone(&vulkan.render_pass)
             ));
 
+            // 初始化各层
+            let mut layer_stack = self.layer_stack.take().unwrap();
+            let mut renderer = self.renderer.take().unwrap();
+            layer_stack.iter_mut().for_each(|layer| layer.on_ready(&mut renderer));
+            self.layer_stack = Some(layer_stack);
+            self.renderer = Some(renderer);
+
             // 归还数据
             self.window = Some(window.clone());
             self.vulkan = Some(vulkan);
         }
     }
-
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
-        // 逻辑更新
-        let mut layer_stack = self.layer_stack.take().unwrap();
-        let current_time = Instant::now();
-        let duration = current_time.duration_since(self.last_time.unwrap()).as_secs_f64().max(0.0);
-        self.last_time = Some(current_time);
-        physics_update(&mut layer_stack, duration, &mut self.accumulated_time);
-        update(&mut layer_stack, duration);
-        self.layer_stack = Some(layer_stack);
+
 
         // 事件监听
         match event {
@@ -104,21 +99,14 @@ impl ApplicationHandler for Application {
                 self.renderer = Some(renderer);
                 self.vulkan = Some(vulkan);
                 self.window = Some(window);
-                self.window.as_ref().unwrap().request_redraw();
             },
             WindowEvent::Resized(size) => {
                 let mut vulkan = self.vulkan.take().unwrap();
-                let window = self.window.take().unwrap();
-
-                vulkan.window_resized = true;
-                vulkan.recreate_swapchain(
-                    window.clone(),
-                    self.renderer.as_mut().unwrap(),
-                    self.layer_stack.as_mut().unwrap()
-                );
+                vulkan.dirty.insert(RenderDirty::SWAPCHAIN);
+                vulkan.dirty.insert(RenderDirty::PIPELINE);
+                vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
 
                 self.vulkan = Some(vulkan);
-                self.window = Some(window);
 
                 self.event = Some(WindowEvent::Resized(size));
             },
@@ -141,7 +129,7 @@ impl ApplicationHandler for Application {
             } => {
                 self.event = Some(WindowEvent::KeyboardInput {
                     device_id, event, is_synthetic
-                })
+                });
             },
             _ => ()
         }
@@ -156,6 +144,24 @@ impl ApplicationHandler for Application {
             None => ()
         }
         self.layer_stack = Some(layer_stack);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // 逻辑更新
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_time.unwrap()).as_secs_f64();
+        self.last_time = Some(now);
+
+        let layer_stack = self.layer_stack.as_mut().unwrap();
+
+        physics_update(layer_stack, dt, &mut self.accumulated_time);
+        update(layer_stack, dt);
+
+        let mut vulkan = self.vulkan.take().unwrap();
+        vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
+        self.vulkan = Some(vulkan);
+
+        self.window.as_ref().unwrap().request_redraw();
     }
 }
 
