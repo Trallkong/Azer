@@ -3,7 +3,7 @@ use crate::core::delta_time::DeltaTime;
 use crate::core::layer::Layer;
 use crate::core::layer_stack::LayerStack;
 use crate::renderer::renderer::Renderer;
-use log::{info, warn};
+use log::info;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
@@ -14,58 +14,77 @@ use winit::window::{Window, WindowId};
 const FIXED_PHYSICS_STEP: f64 = 1.0/60.0; // 固定物理步长
 const MAX_PHYSICS_STEPS: usize = 10; // 最大物理步次
 
-#[derive (Default)]
+enum AppState {
+    Uninitialized {
+       layer_stack: LayerStack,
+    },
+    Running {
+        window: Arc<Window>,
+        layer_stack: LayerStack,
+        vulkan: Vulkan,
+        renderer: Renderer,
+
+        last_time: Instant,
+        accumulated_time: f64,
+    }
+}
+
 pub struct Application {
-    window: Option<Arc<Window>>, // 窗口
-    event: Option<WindowEvent>, // 分发事件
-    layer_stack: Option<LayerStack>, // 层栈
-
-    last_time: Option<Instant>, // 上一帧的时间
-    accumulated_time: f64,  // 物理步长累计时间
-
-    vulkan: Option<Vulkan>,
-    initialized: bool,
-
-    renderer: Option<Renderer>,
+    state: AppState,
 }
 
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        warn!("Resuming application");
+        info!("Resuming application");
 
-        if !self.initialized {
-            self.initialized = true;
+        // 获取状态
+        let state = std::mem::replace(&mut self.state, AppState::Uninitialized {layer_stack: LayerStack::new()});
 
-            // 初始化 Window
+        if let AppState::Uninitialized { mut layer_stack } = state {
+            // 创建窗口
             let window_attribute = Window::default_attributes()
                 .with_title("Azer")
                 .with_inner_size(winit::dpi::PhysicalSize::new(1280,720));
 
-            let window = Arc::new(event_loop.create_window(window_attribute.clone()).unwrap());
+            let window = Arc::new(
+                event_loop.create_window(window_attribute).unwrap()
+            );
+
+            // 创建 vulkan
             let vulkan = Vulkan::new(window.clone());
 
-            // 初始化 renderer
-            self.renderer = Some(Renderer::new(
-                Arc::clone(&vulkan.device),
-                Arc::clone(&vulkan.queue),
-                Arc::clone(&window),
-                Arc::clone(&vulkan.render_pass)
-            ));
+            // 创建渲染器
+            let mut renderer = Renderer::new(
+                vulkan.device.clone(),
+                vulkan.queue.clone(),
+                window.clone(),
+                vulkan.render_pass.clone()
+            );
 
-            // 初始化各层
-            let mut layer_stack = self.layer_stack.take().unwrap();
-            let mut renderer = self.renderer.take().unwrap();
+            // 层栈初始化
             layer_stack.iter_mut().for_each(|layer| layer.on_ready(&mut renderer));
-            self.layer_stack = Some(layer_stack);
-            self.renderer = Some(renderer);
 
-            // 归还数据
-            self.window = Some(window.clone());
-            self.vulkan = Some(vulkan);
+            // 切换运行状态
+            self.state = AppState::Running {
+                window,
+                layer_stack,
+                vulkan,
+                renderer,
+                last_time: Instant::now(),
+                accumulated_time: 0.0,
+            }
         }
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
-
+        let AppState::Running {
+            window,
+            layer_stack,
+            vulkan,
+            renderer,
+            ..
+        } = &mut self.state else {
+            return;
+        };
 
         // 事件监听
         match event {
@@ -73,7 +92,6 @@ impl ApplicationHandler for Application {
                 info!("检测到点击关闭按钮，开始清理，请不要退出应用！");
 
                 // 清理层栈
-                let mut layer_stack = self.layer_stack.take().unwrap();
                 layer_stack.iter_mut().for_each(|layer| layer.on_close());
                 layer_stack.clear();
 
@@ -82,68 +100,24 @@ impl ApplicationHandler for Application {
                 return;
             },
             WindowEvent::RedrawRequested => {
-                let mut vulkan = self.vulkan.take().unwrap();
-                let window = self.window.take().unwrap();
-                let mut renderer = self.renderer.take().unwrap();
-                let mut layer_stack = self.layer_stack.take().unwrap();
 
                 vulkan.recreate_swapchain(
                     window.clone(),
-                    &mut renderer,
-                    &mut layer_stack,
+                    renderer,
                 );
 
-                vulkan.submit();
-
-                self.layer_stack = Some(layer_stack);
-                self.renderer = Some(renderer);
-                self.vulkan = Some(vulkan);
-                self.window = Some(window);
+                vulkan.submit(renderer, layer_stack, vulkan.queue.clone());
             },
             WindowEvent::Resized(size) => {
-                let mut vulkan = self.vulkan.take().unwrap();
                 vulkan.dirty.insert(RenderDirty::SWAPCHAIN);
                 vulkan.dirty.insert(RenderDirty::PIPELINE);
                 vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
-
-                self.vulkan = Some(vulkan);
-
-                self.event = Some(WindowEvent::Resized(size));
-            },
-            WindowEvent::CursorMoved {
-                device_id, position
-            } => {
-                self.event = Some(WindowEvent::CursorMoved {
-                    device_id, position
-                });
-            },
-            WindowEvent::MouseInput {
-                device_id, state, button
-            } => {
-                self.event = Some(WindowEvent::MouseInput {
-                    device_id, state, button
-                });
-            },
-            WindowEvent::KeyboardInput {
-                device_id, event, is_synthetic
-            } => {
-                self.event = Some(WindowEvent::KeyboardInput {
-                    device_id, event, is_synthetic
-                });
             },
             _ => ()
         }
 
         // 事件分发
-        let mut layer_stack = self.layer_stack.take().unwrap();
-        let current_event = self.event.take();
-        match current_event {
-            Some(event) => {
-                layer_stack.iter_mut().for_each(|layer| layer.on_event(&event));
-            },
-            None => ()
-        }
-        self.layer_stack = Some(layer_stack);
+        layer_stack.iter_mut().for_each(|layer| layer.on_event(&event));
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -151,42 +125,46 @@ impl ApplicationHandler for Application {
             return;
         }
 
+        let AppState::Running {
+            window,
+            layer_stack,
+            vulkan,
+            renderer,
+            last_time,
+            accumulated_time,
+        } = &mut self.state else {
+            return;
+        };
+
         // 逻辑更新
         let now = Instant::now();
-        let dt = now.duration_since(self.last_time.unwrap()).as_secs_f64();
-        self.last_time = Some(now);
+        let dt = now.duration_since(*last_time).as_secs_f64();
+        *last_time = now;
 
-        let layer_stack = self.layer_stack.as_mut().unwrap();
-        let renderer = self.renderer.as_mut().unwrap();
+        physics_update(layer_stack, dt, accumulated_time);
+        update(layer_stack, renderer,dt);
 
-        physics_update(layer_stack, dt, &mut self.accumulated_time);
-        update(layer_stack,renderer,dt);
-
-        let mut vulkan = self.vulkan.take().unwrap();
         vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
-        self.vulkan = Some(vulkan);
 
-        self.window.as_ref().unwrap().request_redraw();
+        window.request_redraw();
     }
 }
 
 impl Application {
-    pub fn new() -> Application {
-        Application {
-            window: None,
-            event: None,
-            layer_stack: Some(LayerStack::new()),
-            last_time: Some(Instant::now()),
-            accumulated_time: 0.0,
-            vulkan: None,
-            initialized: false,
-            renderer: None,
+    pub fn new() -> Self {
+        Self {
+            state: AppState::Uninitialized {
+                layer_stack: LayerStack::new(),
+            }
         }
     }
     pub fn push_layer(&mut self, layer: Box<dyn Layer>) {
-        let mut layer_stack = self.layer_stack.take().expect("请先初始化LayerStack");
-        layer_stack.push(layer);
-        self.layer_stack = Some(layer_stack);
+        if let AppState::Running {
+            layer_stack,
+            ..
+        } = &mut self.state {
+            layer_stack.push(layer);
+        }
     }
 }
 

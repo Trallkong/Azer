@@ -2,6 +2,7 @@ use crate::api::shaders::sd_camera2d::Cam2dShaderData;
 use crate::api::shaders::Shader;
 use crate::api::vulkan_helper;
 use crate::renderer::camera::Camera2dUniform;
+use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::render_trait::Render;
 use crate::renderer::renderer2d::render_rectangle::RenderRectangle;
 use crate::renderer::renderer2d::render_triangle::RenderTriangle;
@@ -10,10 +11,10 @@ use std::sync::Arc;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use vulkano::memory::allocator::StandardMemoryAllocator;
-use vulkano::pipeline::{GraphicsPipeline, Pipeline};
+use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::{
     command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo},
-    command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo},
+    command_buffer::{RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo},
     device::{Device, Queue},
     render_pass::{Framebuffer, RenderPass}
 };
@@ -23,16 +24,14 @@ use winit::window::Window;
 pub struct RendererContext {
     pub buffer_allocator: Arc<StandardMemoryAllocator>,
     pub descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
-    pub camera_set_layout: Arc<DescriptorSetLayout>,
     pub cam_2d_uniform: Arc<Camera2dUniform>,
 }
 
 pub struct Renderer {
-    cmd_bf_builder: Option<AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>>,
     render_triangle: Box<RenderTriangle>,
     render_rectangle: Box<RenderRectangle>,
 
-    allocator: Arc<StandardCommandBufferAllocator>,
+    pub allocator: Arc<StandardCommandBufferAllocator>,
     queue: Arc<Queue>,
 
     renderer_context: Arc<RendererContext>,
@@ -42,6 +41,7 @@ pub struct Renderer {
     render_pass: Arc<RenderPass>,
     shader: Arc<dyn Shader>,
     pipeline: Arc<GraphicsPipeline>,
+    descriptor_set_layout: Arc<DescriptorSetLayout>,
 }
 
 impl Renderer {
@@ -57,14 +57,6 @@ impl Renderer {
             StandardCommandBufferAllocatorCreateInfo::default()
         ));
 
-        let builder =
-            AutoCommandBufferBuilder::primary(
-                allocator.clone(),
-                queue.queue_family_index(),
-                CommandBufferUsage::MultipleSubmit,
-            ).unwrap();
-
-
         let buffer_allocator = Arc::new(StandardMemoryAllocator::new_default(Arc::clone(&device)));
         let descriptor_set_allocator = vulkan_helper::get_descriptor_set_allocator(device.clone());
 
@@ -78,7 +70,7 @@ impl Renderer {
             shader.clone()
         );
 
-        let camera_set_layout = pipeline.layout().set_layouts().get(0).unwrap().clone();
+        let set_layout = pipeline.layout().set_layouts().get(0).unwrap().clone();
 
         let data = Cam2dShaderData::default();
 
@@ -90,14 +82,13 @@ impl Renderer {
         let descriptor_set = vulkan_helper::get_descriptor_set(
             uniform_buffer.clone(),
             0,
-            camera_set_layout.clone(),
+            set_layout.clone(),
             descriptor_set_allocator.clone(),
         );
 
         let renderer_context = RendererContext {
             buffer_allocator,
             descriptor_set_allocator,
-            camera_set_layout,
             cam_2d_uniform: Arc::new(Camera2dUniform {
                 buffer: uniform_buffer,
                 set: descriptor_set,
@@ -107,7 +98,6 @@ impl Renderer {
         let renderer_context = Arc::new(renderer_context);
 
         Self {
-            cmd_bf_builder: Some(builder),
             render_triangle: Box::new(
                 RenderTriangle::new(
                     Arc::clone(&device),
@@ -132,29 +122,16 @@ impl Renderer {
             render_pass,
             shader,
             pipeline,
+            descriptor_set_layout: set_layout,
         }
-    }
-
-    pub fn recreate_builder(&mut self) {
-        self.cmd_bf_builder = Some(AutoCommandBufferBuilder::primary(
-            self.allocator.clone(),
-            self.queue.queue_family_index(),
-            CommandBufferUsage::MultipleSubmit,
-        ).unwrap());
     }
 
     pub fn update_camera(&mut self, view_projection_matrix: Mat4) {
         self.renderer_context.cam_2d_uniform.update(view_projection_matrix);
     }
 
-    pub fn begin(
-        &mut self,
-        framebuffer: Arc<Framebuffer>,
-        clear_color: [f32; 4],
-    ) {
-        let mut builder = self.cmd_bf_builder.take().unwrap();
-
-        builder
+    pub fn begin(&mut self, frame: &mut FrameCommands, framebuffer: Arc<Framebuffer>, clear_color: [f32; 4], ) {
+        frame.builder
             .begin_render_pass(
                 RenderPassBeginInfo {
                     clear_values: vec![Some(clear_color.into())],
@@ -164,40 +141,27 @@ impl Renderer {
                     contents: SubpassContents::Inline,
                     ..SubpassBeginInfo::default()
                 }
-            )
-            .unwrap()
-        ;
-
-        self.cmd_bf_builder = Some(builder);
+            ).unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Graphics,
+                self.pipeline.layout().clone(),
+                0,
+                self.renderer_context.cam_2d_uniform.set.clone(),
+            ).unwrap();
     }
 
-    pub fn end(
-        &mut self,
-    ) {
-        let mut builder = self.cmd_bf_builder.take().unwrap();
-
-        builder
+    pub fn end(&mut self, frame: &mut FrameCommands) {
+        frame.builder
             .end_render_pass(SubpassEndInfo::default())
             .unwrap();
-
-        self.cmd_bf_builder = Some(builder);
     }
 
-    pub fn submit(&mut self) -> Arc<PrimaryAutoCommandBuffer> {
-        let builder = self.cmd_bf_builder.take().unwrap();
-        let command_buffer = builder.build().unwrap();
-        self.recreate_builder();
-        command_buffer
+    pub fn draw_triangle(&mut self, frame: &mut FrameCommands) {
+        self.render_triangle.draw(frame, self.pipeline.clone())
     }
 
-    pub fn draw_triangle(&mut self) {
-        let builder = self.cmd_bf_builder.take().unwrap();
-        self.cmd_bf_builder = Some(self.render_triangle.draw(builder, self.pipeline.clone()));
-    }
-
-    pub fn draw_rectangle(&mut self) {
-        let builder = self.cmd_bf_builder.take().unwrap();
-        self.cmd_bf_builder = Some(self.render_rectangle.draw(builder,  self.pipeline.clone()));
+    pub fn draw_rectangle(&mut self, frame: &mut FrameCommands) {
+        self.render_rectangle.draw(frame, self.pipeline.clone())
     }
 
     pub fn recreate_pipeline(&mut self) {

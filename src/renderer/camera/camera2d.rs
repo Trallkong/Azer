@@ -1,5 +1,5 @@
-use glam::{Mat4, Vec2, Vec3};
 use crate::renderer::camera::Camera;
+use glam::{Mat4, Vec2, Vec3};
 
 #[derive(Clone)]
 pub struct Camera2D {

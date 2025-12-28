@@ -1,8 +1,8 @@
+use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::renderer::RendererContext;
 use crate::renderer::vertex::Vertex2D;
 use std::sync::Arc;
 use vulkano::buffer::Subbuffer;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::device::Device;
 use vulkano::pipeline::GraphicsPipeline;
@@ -25,5 +25,5 @@ pub trait Render {
         render_pass: Arc<RenderPass>,
         renderer_context: Arc<RendererContext>
     ) -> Self;
-    fn draw(&mut self, cmd_bf_builder: AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>, pipeline: Arc<GraphicsPipeline>) -> AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>;
+    fn draw(&mut self, frame: &mut FrameCommands, pipeline: Arc<GraphicsPipeline>);
 }

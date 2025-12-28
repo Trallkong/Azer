@@ -1,10 +1,10 @@
+use crate::api::shaders::Shader;
 use std::fmt::Debug;
 use std::sync::Arc;
+use vulkano::buffer::BufferContents;
 use vulkano::device::Device;
 use vulkano::shader::ShaderModule;
 use vulkano::{Validated, VulkanError};
-use vulkano::buffer::BufferContents;
-use crate::api::shaders::Shader;
 
 mod vs {
     vulkano_shaders::shader! {

@@ -1,11 +1,12 @@
 pub use crate::core::delta_time::DeltaTime;
+use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::renderer::Renderer;
 pub use winit::event::WindowEvent;
 
 pub trait Layer: Send + Sync {
     fn on_ready(&mut self, renderer: &mut Renderer);
     fn on_update(&mut self, delta: &DeltaTime, renderer: &mut Renderer);
-    fn on_render(&mut self, renderer: &mut Renderer);
+    fn on_render(&mut self, renderer: &mut Renderer, frame: &mut FrameCommands);
     fn on_physics_update(&mut self, delta: &DeltaTime);
     fn on_event(&mut self, event: &WindowEvent);
     fn on_close(&mut self);

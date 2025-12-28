@@ -1,5 +1,6 @@
 use crate::api::vulkan_helper;
 use crate::core::layer_stack::LayerStack;
+use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::renderer::Renderer;
 use log::error;
 use std::sync::Arc;
@@ -99,7 +100,7 @@ impl Vulkan {
         }
     }
 
-    pub fn submit(&mut self) {
+    pub fn submit(&mut self, renderer: &mut Renderer, layer_stack: &mut LayerStack, queue: Arc<Queue>) {
 
         let (image_i, suboptimal, acquire_future) =
             match acquire_next_image(self.swapchain.clone(), None)
@@ -118,9 +119,11 @@ impl Vulkan {
             return;
         }
 
+        let command_buffer = get_command_buffer(renderer, layer_stack, self.frame_buffers[image_i as usize].clone(), Arc::clone(&queue));
+
         let execution = sync::now(self.device.clone())
             .join(acquire_future)
-            .then_execute(self.queue.clone(), self.command_buffers[image_i as usize].clone())
+            .then_execute(self.queue.clone(), command_buffer)
             .unwrap()
             .then_swapchain_present(
                 self.queue.clone(),
@@ -141,7 +144,7 @@ impl Vulkan {
         }
     }
 
-    pub fn recreate_swapchain(&mut self, window: Arc<Window>, renderer: &mut Renderer, layer_stack: &mut LayerStack) {
+    pub fn recreate_swapchain(&mut self, window: Arc<Window>, renderer: &mut Renderer) {
         if window.is_minimized().unwrap() {
             return;
         }
@@ -167,51 +170,23 @@ impl Vulkan {
             renderer.recreate_pipeline();
             self.dirty.remove(RenderDirty::PIPELINE);
         }
-
-        if self.dirty.contains(RenderDirty::COMMAND_BUF) {
-            self.command_buffers = get_command_buffers(
-                renderer,
-                layer_stack,
-                self.frame_buffers.clone(),
-            );
-        }
     }
 }
 
-/// 创建一组CommandBuffer（Arc包裹）
-///
-/// @param allocator 命令缓冲区分配器
-///
-/// @param queue 设备队列
-///
-/// @param pipeline 可选的图像管线，若为None即是清屏
-///
-/// @param framebuffers
-///
-/// @return 一组命令缓冲区（Arc包裹）
-///
-fn get_command_buffers(
+
+fn get_command_buffer(
     renderer: &mut Renderer,
     layer_stack: &mut LayerStack,
-    framebuffers: Vec<Arc<Framebuffer>>,
-) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
-    let mut command_buffers: Vec<Arc<PrimaryAutoCommandBuffer>> = Vec::new();
+    framebuffer: Arc<Framebuffer>,
+    queue: Arc<Queue>,
+) -> Arc<PrimaryAutoCommandBuffer> {
+    let mut frame = FrameCommands::new(renderer.allocator.clone(), queue);
 
-    framebuffers.into_iter().for_each(|framebuffer| {
-        renderer.begin(
-            framebuffer.clone(),
-            [0.1,0.1,0.1,1.0]
-        );
-
-        layer_stack.iter_mut().for_each(|layer| {
-            layer.on_render(renderer);
-        });
-
-        renderer.end();
-
-        let command_buffer = renderer.submit();
-        command_buffers.push(command_buffer);
+    renderer.begin(&mut frame, framebuffer, [0.1,0.1,0.1,1.0]);
+    layer_stack.iter_mut().for_each(|layer| {
+        layer.on_render(renderer, &mut frame);
     });
+    renderer.end(&mut frame);
 
-    command_buffers
+    frame.builder.build().unwrap()
 }

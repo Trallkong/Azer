@@ -1,8 +1,8 @@
+use crate::api::shaders::sd_camera2d::Cam2dShaderData;
+use glam::Mat4;
 use std::sync::Arc;
-use glam::{Mat4, Quat, Vec2};
 use vulkano::buffer::Subbuffer;
 use vulkano::descriptor_set::DescriptorSet;
-use crate::api::shaders::sd_camera2d::Cam2dShaderData;
 
 pub mod camera2d;
 

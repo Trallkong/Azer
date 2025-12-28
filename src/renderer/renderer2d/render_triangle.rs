@@ -1,10 +1,10 @@
+use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::render_trait::{Render, RenderData};
 use crate::renderer::renderer::RendererContext;
 use crate::renderer::vertex::{get_vbo_2d, Vertex2D};
 use std::sync::Arc;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::device::Device;
-use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
+use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::RenderPass;
 use winit::window::Window;
 
@@ -42,24 +42,15 @@ impl Render for RenderTriangle {
         }
     }
 
-    fn draw(&mut self, mut cmd_bf_builder: AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>, pipeline: Arc<GraphicsPipeline>) -> AutoCommandBufferBuilder<PrimaryAutoCommandBuffer> {
+    fn draw(&mut self, frame: &mut FrameCommands, pipeline: Arc<GraphicsPipeline>) {
         unsafe {
-            cmd_bf_builder
+            &mut frame.builder
                 .bind_pipeline_graphics(pipeline.clone())
-                .unwrap()
-                .bind_descriptor_sets(
-                    PipelineBindPoint::Graphics,
-                    pipeline.layout().clone(),
-                    0,
-                    self.data.descriptor_set.clone(),
-                )
                 .unwrap()
                 .bind_vertex_buffers(0, self.data.vbo.clone())
                 .unwrap()
                 .draw(3, 1, 0, 0)
                 .unwrap();
         }
-
-        cmd_bf_builder
     }
 }
