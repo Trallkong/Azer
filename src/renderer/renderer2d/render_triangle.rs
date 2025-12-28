@@ -1,8 +1,6 @@
-use crate::api::vulkan_helper;
-use crate::render::render::{Render, RenderData};
-use crate::render::renderer::RendererContext;
-use crate::render::vertex::{get_vbo_2d, Vertex2D};
-use glam::Mat4;
+use crate::renderer::render_trait::{Render, RenderData};
+use crate::renderer::renderer::RendererContext;
+use crate::renderer::vertex::{get_vbo_2d, Vertex2D};
 use std::sync::Arc;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::device::Device;
@@ -39,21 +37,12 @@ impl Render for RenderTriangle {
                 window,
                 device,
                 render_pass,
-                view_projection_matrix: Mat4::IDENTITY,
-                renderer_context,
+                descriptor_set: renderer_context.cam_2d_uniform.set.clone(),
             }
         }
     }
 
     fn draw(&mut self, mut cmd_bf_builder: AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>, pipeline: Arc<GraphicsPipeline>) -> AutoCommandBufferBuilder<PrimaryAutoCommandBuffer> {
-        let buffer_data = crate::api::shaders::sd_camera2d::Data {
-            mvp: self.data.view_projection_matrix.to_cols_array_2d(),
-            color: [0.5, 0.0, 0.0, 1.0],
-        };
-
-        let mut content = self.data.renderer_context.uniform_buffer.write().unwrap();
-        *content = buffer_data;
-
         unsafe {
             cmd_bf_builder
                 .bind_pipeline_graphics(pipeline.clone())
@@ -62,7 +51,7 @@ impl Render for RenderTriangle {
                     PipelineBindPoint::Graphics,
                     pipeline.layout().clone(),
                     0,
-                    self.data.renderer_context.descriptor_set.clone(),
+                    self.data.descriptor_set.clone(),
                 )
                 .unwrap()
                 .bind_vertex_buffers(0, self.data.vbo.clone())
@@ -72,9 +61,5 @@ impl Render for RenderTriangle {
         }
 
         cmd_bf_builder
-    }
-
-    fn set_camera(&mut self, view_projection_matrix: Mat4) {
-        self.data.view_projection_matrix = view_projection_matrix;
     }
 }

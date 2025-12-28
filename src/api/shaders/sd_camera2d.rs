@@ -14,14 +14,15 @@ mod vs {
 
             layout(location = 0) in vec2 position;
             layout(set = 0, binding = 0) uniform Data {
-                mat4 mvp;
+                mat4 view_proj;
+                mat4 transform;
                 vec4 color;
             } ubo;
 
             layout(location = 0) out vec4 v_Color;
 
             void main() {
-                gl_Position = ubo.mvp * vec4(position, 0.0, 1.0);
+                gl_Position = ubo.view_proj * ubo.transform * vec4(position, 0.0, 1.0);
                 v_Color = ubo.color;
             }
         ",
@@ -71,8 +72,19 @@ impl Shader for ShaderCamera2D {
 }
 
 #[repr(C)]
-#[derive(BufferContents)]
-pub struct Data {
-    pub mvp: [[f32; 4]; 4],
+#[derive(BufferContents, Clone, Copy)]
+pub struct Cam2dShaderData {
+    pub view_proj: [[f32; 4]; 4],
+    pub transform: [[f32; 4]; 4],
     pub color: [f32; 4]
+}
+
+impl Default for Cam2dShaderData {
+    fn default() -> Self {
+        Self {
+            view_proj: [[1.0; 4]; 4],
+            transform: [[1.0; 4]; 4],
+            color: [0.5; 4]
+        }
+    }
 }

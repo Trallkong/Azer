@@ -1,6 +1,6 @@
 use crate::api::vulkan_helper;
 use crate::core::layer_stack::LayerStack;
-use crate::render::renderer::Renderer;
+use crate::renderer::renderer::Renderer;
 use log::error;
 use std::sync::Arc;
 use vulkano::{

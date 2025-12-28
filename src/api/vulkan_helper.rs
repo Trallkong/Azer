@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use crate::api::shaders::Shader;
-use crate::render::vertex::Vertex2D;
+use crate::renderer::vertex::Vertex2D;
 use std::sync::Arc;
 use log::error;
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};

@@ -1,32 +1,30 @@
+use crate::api::shaders::sd_camera2d::Cam2dShaderData;
+use crate::api::shaders::Shader;
 use crate::api::vulkan_helper;
-use crate::render::render::Render;
-use crate::render::render_rectangle::RenderRectangle;
-use crate::render::render_triangle::RenderTriangle;
+use crate::renderer::camera::Camera2dUniform;
+use crate::renderer::render_trait::Render;
+use crate::renderer::renderer2d::render_rectangle::RenderRectangle;
+use crate::renderer::renderer2d::render_triangle::RenderTriangle;
 use glam::Mat4;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::pipeline::{GraphicsPipeline, Pipeline};
 use vulkano::{
     command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo},
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo},
     device::{Device, Queue},
     render_pass::{Framebuffer, RenderPass}
 };
-use vulkano::buffer::Subbuffer;
-use vulkano::descriptor_set::DescriptorSet;
-use vulkano::pipeline::{GraphicsPipeline, Pipeline};
 use winit::window::Window;
-use crate::api::shaders::sd_camera2d::Data;
-use crate::api::shaders::Shader;
 
+#[derive(Clone)]
 pub struct RendererContext {
     pub buffer_allocator: Arc<StandardMemoryAllocator>,
     pub descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     pub camera_set_layout: Arc<DescriptorSetLayout>,
-
-    pub uniform_buffer: Subbuffer<Data>,
-    pub descriptor_set: Arc<DescriptorSet>,
+    pub cam_2d_uniform: Arc<Camera2dUniform>,
 }
 
 pub struct Renderer {
@@ -82,10 +80,7 @@ impl Renderer {
 
         let camera_set_layout = pipeline.layout().set_layouts().get(0).unwrap().clone();
 
-        let data = Data {
-            mvp: Mat4::IDENTITY.to_cols_array_2d(),
-            color: [1.0,1.0,1.0,1.0]
-        };
+        let data = Cam2dShaderData::default();
 
         let uniform_buffer = vulkan_helper::get_uniform_buffer(
             data,
@@ -103,9 +98,12 @@ impl Renderer {
             buffer_allocator,
             descriptor_set_allocator,
             camera_set_layout,
-            uniform_buffer,
-            descriptor_set,
+            cam_2d_uniform: Arc::new(Camera2dUniform {
+                buffer: uniform_buffer,
+                set: descriptor_set,
+            })
         };
+
         let renderer_context = Arc::new(renderer_context);
 
         Self {
@@ -145,9 +143,8 @@ impl Renderer {
         ).unwrap());
     }
 
-    pub fn set_camera(&mut self, view_projection_matrix: Mat4) {
-        self.render_triangle.set_camera(view_projection_matrix);
-        self.render_rectangle.set_camera(view_projection_matrix);
+    pub fn update_camera(&mut self, view_projection_matrix: Mat4) {
+        self.renderer_context.cam_2d_uniform.update(view_projection_matrix);
     }
 
     pub fn begin(

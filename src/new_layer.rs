@@ -2,12 +2,12 @@ use std::sync::{Arc, Mutex};
 use glam::Vec2;
 use azer::core::delta_time::DeltaTime;
 use azer::core::layer::Layer;
-use azer::render::renderer::Renderer;
+use azer::renderer::renderer::Renderer;
 use log::info;
 use winit::event::WindowEvent;
 use winit::keyboard::{KeyCode, PhysicalKey};
-use azer::render::camera::Camera;
-use azer::render::camera::camera2d::Camera2D;
+use azer::renderer::camera::Camera;
+use azer::renderer::camera::camera2d::Camera2D;
 
 pub struct NewLayer {
     pub camera: Camera2D
@@ -27,15 +27,14 @@ impl NewLayer {
 impl Layer for NewLayer {
     fn on_ready(&mut self, renderer: &mut Renderer) {
         info!("NewLayer ready");
-        renderer.set_camera(*self.camera.get_view_projection_matrix())
     }
 
-    fn on_update(&mut self, _delta: &DeltaTime) {
+    fn on_update(&mut self, _delta: &DeltaTime, renderer: &mut Renderer) {
         self.camera.update();
+        renderer.update_camera(*self.camera.get_view_projection_matrix());
     }
 
     fn on_render(&mut self, renderer: &mut Renderer) {
-        renderer.set_camera(*self.camera.get_view_projection_matrix());
         renderer.draw_rectangle();
         renderer.draw_triangle();
     }

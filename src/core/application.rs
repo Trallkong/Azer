@@ -2,7 +2,7 @@ use crate::api::vulkan::{RenderDirty, Vulkan};
 use crate::core::delta_time::DeltaTime;
 use crate::core::layer::Layer;
 use crate::core::layer_stack::LayerStack;
-use crate::render::renderer::Renderer;
+use crate::renderer::renderer::Renderer;
 use log::{info, warn};
 use std::sync::Arc;
 use std::time::Instant;
@@ -147,15 +147,20 @@ impl ApplicationHandler for Application {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if event_loop.exiting() {
+            return;
+        }
+
         // 逻辑更新
         let now = Instant::now();
         let dt = now.duration_since(self.last_time.unwrap()).as_secs_f64();
         self.last_time = Some(now);
 
         let layer_stack = self.layer_stack.as_mut().unwrap();
+        let renderer = self.renderer.as_mut().unwrap();
 
         physics_update(layer_stack, dt, &mut self.accumulated_time);
-        update(layer_stack, dt);
+        update(layer_stack,renderer,dt);
 
         let mut vulkan = self.vulkan.take().unwrap();
         vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
@@ -197,8 +202,8 @@ pub fn physics_update(layer_stack: &mut LayerStack, duration: f64, accumulated_t
     }
 }
 
-pub fn update(layer_stack: &mut LayerStack, duration: f64) {
+pub fn update(layer_stack: &mut LayerStack, renderer: &mut Renderer, duration: f64) {
     layer_stack.iter_mut().for_each(|layer| {
-        layer.on_update(&DeltaTime::new(duration));
+        layer.on_update(&DeltaTime::new(duration), renderer);
     });
 }

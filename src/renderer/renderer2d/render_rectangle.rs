@@ -1,12 +1,7 @@
-use crate::api::shaders::Shader;
-use crate::api::vulkan_helper;
-use crate::render::camera::Camera;
-use crate::render::render::{Render, RenderData};
-use crate::render::renderer::RendererContext;
-use crate::render::vertex::{get_vbo_and_ibo_2d, Vertex2D};
+use crate::renderer::render_trait::{Render, RenderData};
+use crate::renderer::renderer::RendererContext;
+use crate::renderer::vertex::{get_vbo_and_ibo_2d, Vertex2D};
 use std::sync::Arc;
-use glam::Mat4;
-use log::info;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::device::Device;
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
@@ -44,24 +39,12 @@ impl Render for RenderRectangle {
                 window,
                 device,
                 render_pass,
-                view_projection_matrix: Mat4::IDENTITY,
-                renderer_context,
+                descriptor_set: renderer_context.cam_2d_uniform.set.clone(),
             }
         }
     }
 
     fn draw(&mut self, mut cmd_bf_builder: AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>, pipeline: Arc<GraphicsPipeline>) -> AutoCommandBufferBuilder<PrimaryAutoCommandBuffer> {
-
-        let view_proj_matrix = self.data.view_projection_matrix;
-
-        let uniform_data = crate::api::shaders::sd_camera2d::Data {
-            mvp: view_proj_matrix.to_cols_array_2d(),
-            color: [1.0, 0.0, 0.0, 1.0],
-        };
-
-        let mut content = self.data.renderer_context.uniform_buffer.write().unwrap();
-        *content = uniform_data;
-
         unsafe {
             cmd_bf_builder
                 .bind_pipeline_graphics(pipeline.clone())
@@ -70,7 +53,7 @@ impl Render for RenderRectangle {
                     PipelineBindPoint::Graphics,
                     pipeline.layout().clone(),
                     0,
-                    self.data.renderer_context.descriptor_set.clone(),
+                    self.data.descriptor_set.clone(),
                 )
                 .unwrap()
                 .bind_vertex_buffers(0, self.data.vbo.clone())
@@ -82,9 +65,5 @@ impl Render for RenderRectangle {
         }
 
         cmd_bf_builder
-    }
-
-    fn set_camera(&mut self, view_projection_matrix: Mat4) {
-        self.data.view_projection_matrix = view_projection_matrix;
     }
 }
