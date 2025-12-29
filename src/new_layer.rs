@@ -7,7 +7,8 @@ use azer::renderer::shapes::transform::Transform2D;
 use glam::{Quat, Vec2};
 use log::info;
 use winit::event::WindowEvent;
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::KeyCode;
+use azer::core::input::InputState;
 
 pub struct NewLayer {
     pub camera: Camera2D,
@@ -33,7 +34,27 @@ impl Layer for NewLayer {
         info!("NewLayer ready");
     }
 
-    fn on_update(&mut self, _delta: &DeltaTime, renderer: &mut Renderer) {
+    fn on_update(&mut self, _delta: &DeltaTime, renderer: &mut Renderer, input: &mut InputState) {
+        let cam_pos = self.camera.position();
+        let move_speed = 0.2;
+        if input.is_key_pressed(KeyCode::KeyW) {
+            info!("camera move up");
+            self.camera.set_position(Vec2::new(cam_pos.x, cam_pos.y + move_speed));
+        }
+        if input.is_key_pressed(KeyCode::KeyS) {
+            info!("camera move down");
+            self.camera.set_position(Vec2::new(cam_pos.x, cam_pos.y - move_speed));
+        }
+        if input.is_key_pressed(KeyCode::KeyA) {
+            info!("camera move left");
+            self.camera.set_position(Vec2::new(cam_pos.x - move_speed, cam_pos.y));
+        }
+        if input.is_key_pressed(KeyCode::KeyD) {
+            info!("camera move right");
+            self.camera.set_position(Vec2::new(cam_pos.x + move_speed, cam_pos.y));
+        }
+
+
         self.camera.update();
         renderer.update_camera(*self.camera.get_view_projection_matrix());
 
@@ -42,21 +63,6 @@ impl Layer for NewLayer {
     }
 
     fn on_render(&mut self, renderer: &mut Renderer) {
-        // let transform = Transform2D {
-        //     position: Vec2::new(0.0, 0.0),
-        //     scale: Vec2::new(0.5, 0.5),
-        //     rotation: self.rotation,
-        // };
-        // renderer.draw_triangle(transform, [1.0,0.4,0.6,0.8]);
-        //
-        // let transform2 = Transform2D {
-        //     position: Vec2::new(0.0, 0.5),
-        //     scale: Vec2::new(0.5, 0.5),
-        //     rotation: self.rotation,
-        // };
-        //
-        // renderer.draw_rectangle(transform2, [0.2,0.3,0.4,1.0]);
-
         for i in 0..5 {
             for j in 0..5 {
                 let transform = Transform2D {
@@ -79,34 +85,6 @@ impl Layer for NewLayer {
 
     fn on_event(&mut self, event: &WindowEvent) {
         match event {
-            WindowEvent::KeyboardInput {
-                device_id: _device_id,
-                event,
-                is_synthetic: _is_synthetic,
-            } => {
-                let cam_pos = self.camera.position();
-                let move_speed = 0.2;
-
-                if event.physical_key == PhysicalKey::Code(KeyCode::KeyA) {
-                    info!("camera move left");
-                    self.camera.set_position(Vec2::new(cam_pos.x - move_speed, cam_pos.y));
-                }
-
-                if event.physical_key == PhysicalKey::Code(KeyCode::KeyD) {
-                    info!("camera move right");
-                    self.camera.set_position(Vec2::new(cam_pos.x + move_speed, cam_pos.y));
-                }
-
-                if event.physical_key == PhysicalKey::Code(KeyCode::KeyW) {
-                    info!("camera move up");
-                    self.camera.set_position(Vec2::new(cam_pos.x, cam_pos.y + move_speed));
-                }
-
-                if event.physical_key == PhysicalKey::Code(KeyCode::KeyS) {
-                    info!("camera move down");
-                    self.camera.set_position(Vec2::new(cam_pos.x, cam_pos.y - move_speed));
-                }
-            },
             WindowEvent::MouseWheel {delta,phase, ..} => {
                 if *phase == winit::event::TouchPhase::Started || *phase == winit::event::TouchPhase::Moved {
                     match delta {

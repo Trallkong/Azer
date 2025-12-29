@@ -10,6 +10,7 @@ use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
+use crate::core::input::InputState;
 
 const FIXED_PHYSICS_STEP: f64 = 1.0/60.0; // 固定物理步长
 const MAX_PHYSICS_STEPS: usize = 10; // 最大物理步次
@@ -23,6 +24,7 @@ enum AppState {
         layer_stack: LayerStack,
         vulkan: Vulkan,
         renderer: Renderer,
+        input_state: InputState,
 
         last_time: Instant,
         accumulated_time: f64,
@@ -72,6 +74,9 @@ impl ApplicationHandler for Application {
             // 层栈初始化
             layer_stack.iter_mut().for_each(|layer| layer.on_ready(&mut renderer));
 
+            // 初始化输入状态
+            let input_state = InputState::default();
+
             // 切换运行状态
             self.state = AppState::Running {
                 window,
@@ -80,6 +85,7 @@ impl ApplicationHandler for Application {
                 renderer,
                 last_time: Instant::now(),
                 accumulated_time: 0.0,
+                input_state,
             }
         }
     }
@@ -89,13 +95,14 @@ impl ApplicationHandler for Application {
             layer_stack,
             vulkan,
             renderer,
+            input_state,
             ..
         } = &mut self.state else {
             return;
         };
 
         // 事件监听
-        match event {
+        match &event {
             WindowEvent::CloseRequested => {
                 info!("检测到点击关闭按钮，开始清理，请不要退出应用！");
 
@@ -120,6 +127,30 @@ impl ApplicationHandler for Application {
                 vulkan.dirty.insert(RenderDirty::PIPELINE);
                 vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
             },
+            WindowEvent::KeyboardInput {
+                event, ..
+            } => {
+                if let winit::event::ElementState::Pressed = event.state {
+                    input_state.update_key(event.physical_key, true);
+                } else {
+                    info!("检测到按键抬起，请不要退出应用！");
+                    input_state.update_key(event.physical_key, false);
+                }
+            },
+            WindowEvent::MouseInput {
+                state, button, ..
+            } => {
+                if let winit::event::ElementState::Pressed = state {
+                    input_state.update_mouse(*button, true);
+                } else {
+                    input_state.update_mouse(*button, false);
+                }
+            },
+        WindowEvent::CursorMoved {
+            position, ..
+        } => {
+            input_state.update_mouse_pos(position.x, position.y);
+        }
             _ => ()
         }
 
@@ -139,6 +170,7 @@ impl ApplicationHandler for Application {
             renderer,
             last_time,
             accumulated_time,
+            input_state,
         } = &mut self.state else {
             return;
         };
@@ -149,7 +181,7 @@ impl ApplicationHandler for Application {
         *last_time = now;
 
         physics_update(layer_stack, dt, accumulated_time);
-        update(layer_stack, renderer,dt);
+        update(layer_stack, renderer,dt, input_state);
 
         vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
 
@@ -189,8 +221,8 @@ pub fn physics_update(layer_stack: &mut LayerStack, duration: f64, accumulated_t
     }
 }
 
-pub fn update(layer_stack: &mut LayerStack, renderer: &mut Renderer, duration: f64) {
+pub fn update(layer_stack: &mut LayerStack, renderer: &mut Renderer, duration: f64, input: &mut InputState) {
     layer_stack.iter_mut().for_each(|layer| {
-        layer.on_update(&DeltaTime::new(duration), renderer);
+        layer.on_update(&DeltaTime::new(duration), renderer, input);
     });
 }
