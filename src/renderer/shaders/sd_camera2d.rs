@@ -1,4 +1,4 @@
-use crate::api::shaders::Shader;
+use crate::renderer::shaders::Shader;
 use std::fmt::Debug;
 use std::sync::Arc;
 use vulkano::buffer::BufferContents;

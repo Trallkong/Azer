@@ -1,4 +1,4 @@
-use crate::api::shaders::Shader;
+use crate::renderer::shaders::Shader;
 use crate::renderer::vertex::Vertex2D;
 use log::error;
 use std::collections::BTreeMap;

@@ -1,12 +1,10 @@
 use crate::api::vulkan_helper;
 use crate::core::layer_stack::LayerStack;
-use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::renderer::Renderer;
 use log::error;
 use std::sync::Arc;
 use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator,
-    command_buffer::PrimaryAutoCommandBuffer,
     device::{Device, Queue},
     format::Format,
     image::Image,
@@ -28,7 +26,6 @@ bitflags::bitflags! {
         const COMMAND_BUF   = 1 << 2;
     }
 }
-
 pub struct Vulkan {
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
@@ -37,9 +34,6 @@ pub struct Vulkan {
     pub swapchain_images: Vec<Arc<Image>>,
     pub render_pass: Arc<RenderPass>,
     pub frame_buffers: Vec<Arc<Framebuffer>>,
-    pub command_buffers: Vec<Arc<PrimaryAutoCommandBuffer>>,
-    pub window_resized: bool,
-    pub recreate_swapchain: bool,
     pub viewport: Viewport,
     pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
 
@@ -91,16 +85,13 @@ impl Vulkan {
             swapchain_images: images,
             render_pass,
             frame_buffers: framebuffers,
-            command_buffers: vec![],
-            window_resized: false,
-            recreate_swapchain: false,
             viewport,
             command_buffer_allocator: allocator,
             dirty: RenderDirty::NONE,
         }
     }
 
-    pub fn submit(&mut self, renderer: &mut Renderer, layer_stack: &mut LayerStack, queue: Arc<Queue>) {
+    pub fn submit(&mut self, renderer: &mut Renderer, layer_stack: &mut LayerStack, clear_color: [f32; 4]) {
 
         let (image_i, suboptimal, acquire_future) =
             match acquire_next_image(self.swapchain.clone(), None)
@@ -108,18 +99,22 @@ impl Vulkan {
             {
                 Ok(result) => result,
                 Err(VulkanError::OutOfDate) => {
-                    self.recreate_swapchain = true;
+                    self.dirty.insert(RenderDirty::SWAPCHAIN);
                     return;
                 }
                 Err(e) => panic!("获取下一张图像失败: {}",e),
             };
 
         if suboptimal {
-            self.recreate_swapchain = true;
+            self.dirty.insert(RenderDirty::SWAPCHAIN);
             return;
         }
 
-        let command_buffer = get_command_buffer(renderer, layer_stack, self.frame_buffers[image_i as usize].clone(), Arc::clone(&queue));
+        let command_buffer = renderer.render_frame(
+            self.frame_buffers[image_i as usize].clone(),
+            clear_color,
+            layer_stack,
+        );
 
         let execution = sync::now(self.device.clone())
             .join(acquire_future)
@@ -136,7 +131,7 @@ impl Vulkan {
                 future.wait(None).unwrap();
             }
             Err(VulkanError::OutOfDate) => {
-                self.recreate_swapchain = true;
+                self.dirty.insert(RenderDirty::SWAPCHAIN);
             }
             Err(e) => {
                 error!("failed to flush future: {e}")
@@ -171,22 +166,4 @@ impl Vulkan {
             self.dirty.remove(RenderDirty::PIPELINE);
         }
     }
-}
-
-
-fn get_command_buffer(
-    renderer: &mut Renderer,
-    layer_stack: &mut LayerStack,
-    framebuffer: Arc<Framebuffer>,
-    queue: Arc<Queue>,
-) -> Arc<PrimaryAutoCommandBuffer> {
-    let mut frame = FrameCommands::new(renderer.allocator.clone(), queue);
-
-    renderer.begin(&mut frame, framebuffer, [0.1,0.1,0.1,1.0]);
-    layer_stack.iter_mut().for_each(|layer| {
-        layer.on_render(renderer, &mut frame);
-    });
-    renderer.end(&mut frame);
-
-    frame.builder.build().unwrap()
 }

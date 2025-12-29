@@ -48,6 +48,10 @@ impl Camera2D {
         self.zoom = zoom;
     }
 
+    pub fn zoom(&self) -> f32 {
+        self.zoom
+    }
+
     fn get_projection_matrix(aspect_ratio: f32, zoom: f32, near: f32, far: f32) -> Mat4 {
         let mut m = Mat4::orthographic_rh(-aspect_ratio * zoom, aspect_ratio * zoom, -zoom, zoom, near, far);
         m.y_axis.y *= -1.0;

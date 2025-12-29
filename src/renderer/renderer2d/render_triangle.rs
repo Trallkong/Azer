@@ -1,10 +1,9 @@
 use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::render_trait::{Render, RenderData};
-use crate::renderer::renderer::RendererContext;
-use crate::renderer::vertex::{get_vbo_2d, Vertex2D};
+use crate::renderer::renderer::Allocators;
+use crate::renderer::vertex::{get_vbo_and_ibo_2d, Vertex2D};
 use std::sync::Arc;
 use vulkano::device::Device;
-use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::RenderPass;
 use winit::window::Window;
 
@@ -17,7 +16,7 @@ impl Render for RenderTriangle {
         device: Arc<Device>,
         window: Arc<Window>,
         render_pass: Arc<RenderPass>,
-        renderer_context: Arc<RendererContext>
+        allocators: &Allocators,
     ) -> Self {
         let vertices = vec![
             Vertex2D { position: [0.0, 0.5] },
@@ -25,31 +24,33 @@ impl Render for RenderTriangle {
             Vertex2D { position: [-0.5, -0.5]},
         ];
 
-        let vbo = get_vbo_2d(
+        let indices = vec![0, 1, 2];
+
+        let (vbo, ibo) = get_vbo_and_ibo_2d(
             vertices,
-            renderer_context.buffer_allocator.clone()
+            indices,
+            allocators.buffer_allocator.clone()
         );
 
         RenderTriangle {
             data: RenderData {
                 vbo,
-                ibo: None,
+                ibo: Some(ibo),
                 window,
                 device,
                 render_pass,
-                descriptor_set: renderer_context.cam_2d_uniform.set.clone(),
             }
         }
     }
 
-    fn draw(&mut self, frame: &mut FrameCommands, pipeline: Arc<GraphicsPipeline>) {
+    fn draw(&mut self, frame: &mut FrameCommands, instance_index: usize) {
         unsafe {
-            &mut frame.builder
-                .bind_pipeline_graphics(pipeline.clone())
-                .unwrap()
+            frame.builder
                 .bind_vertex_buffers(0, self.data.vbo.clone())
                 .unwrap()
-                .draw(3, 1, 0, 0)
+                .bind_index_buffer(self.data.ibo.as_ref().unwrap().clone())
+                .unwrap()
+                .draw_indexed(3, 1, 0, 0, instance_index as u32)
                 .unwrap();
         }
     }

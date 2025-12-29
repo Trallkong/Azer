@@ -29,6 +29,14 @@ enum AppState {
     }
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        AppState::Uninitialized {
+            layer_stack: LayerStack::new(),
+        }
+    }
+}
+
 pub struct Application {
     state: AppState,
 }
@@ -38,7 +46,7 @@ impl ApplicationHandler for Application {
         info!("Resuming application");
 
         // 获取状态
-        let state = std::mem::replace(&mut self.state, AppState::Uninitialized {layer_stack: LayerStack::new()});
+        let state = std::mem::take(&mut self.state);
 
         if let AppState::Uninitialized { mut layer_stack } = state {
             // 创建窗口
@@ -100,15 +108,14 @@ impl ApplicationHandler for Application {
                 return;
             },
             WindowEvent::RedrawRequested => {
+                if vulkan.dirty.contains(RenderDirty::SWAPCHAIN) {
+                    vulkan.recreate_swapchain(window.clone(), renderer);
+                    vulkan.dirty.remove(RenderDirty::SWAPCHAIN);
+                }
 
-                vulkan.recreate_swapchain(
-                    window.clone(),
-                    renderer,
-                );
-
-                vulkan.submit(renderer, layer_stack, vulkan.queue.clone());
+                vulkan.submit(renderer, layer_stack, [0.0,0.0,0.0,1.0]);
             },
-            WindowEvent::Resized(size) => {
+            WindowEvent::Resized(_size) => {
                 vulkan.dirty.insert(RenderDirty::SWAPCHAIN);
                 vulkan.dirty.insert(RenderDirty::PIPELINE);
                 vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
@@ -138,7 +145,7 @@ impl ApplicationHandler for Application {
 
         // 逻辑更新
         let now = Instant::now();
-        let dt = now.duration_since(*last_time).as_secs_f64();
+        let dt = now.duration_since(*last_time).as_secs_f64().min(0.25);
         *last_time = now;
 
         physics_update(layer_stack, dt, accumulated_time);
@@ -159,11 +166,13 @@ impl Application {
         }
     }
     pub fn push_layer(&mut self, layer: Box<dyn Layer>) {
-        if let AppState::Running {
-            layer_stack,
-            ..
-        } = &mut self.state {
-            layer_stack.push(layer);
+        match &mut self.state {
+            AppState::Uninitialized { layer_stack } => {
+                layer_stack.push(layer);
+            },
+            AppState::Running { layer_stack, .. } => {
+                layer_stack.push(layer);
+            }
         }
     }
 }
