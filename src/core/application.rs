@@ -1,7 +1,9 @@
 use crate::api::vulkan::{RenderDirty, Vulkan};
 use crate::core::delta_time::DeltaTime;
+use crate::core::input::InputState;
 use crate::core::layer::Layer;
 use crate::core::layer_stack::LayerStack;
+use crate::renderer::image_buffer_man::ImageBufferManager;
 use crate::renderer::renderer::Renderer;
 use log::info;
 use std::sync::Arc;
@@ -10,7 +12,6 @@ use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
-use crate::core::input::InputState;
 
 const FIXED_PHYSICS_STEP: f64 = 1.0/60.0; // 固定物理步长
 const MAX_PHYSICS_STEPS: usize = 10; // 最大物理步次
@@ -25,6 +26,7 @@ enum AppState {
         vulkan: Vulkan,
         renderer: Renderer,
         input_state: InputState,
+        map: ImageBufferManager,
 
         last_time: Instant,
         accumulated_time: f64,
@@ -63,12 +65,15 @@ impl ApplicationHandler for Application {
             // 创建 vulkan
             let vulkan = Vulkan::new(window.clone());
 
+            let mut map = ImageBufferManager::default();
+
             // 创建渲染器
             let mut renderer = Renderer::new(
                 vulkan.device.clone(),
                 vulkan.queue.clone(),
                 window.clone(),
-                vulkan.render_pass.clone()
+                vulkan.render_pass.clone(),
+                &mut map
             );
 
             // 层栈初始化
@@ -86,6 +91,7 @@ impl ApplicationHandler for Application {
                 last_time: Instant::now(),
                 accumulated_time: 0.0,
                 input_state,
+                map
             }
         }
     }
@@ -96,6 +102,7 @@ impl ApplicationHandler for Application {
             vulkan,
             renderer,
             input_state,
+            map,
             ..
         } = &mut self.state else {
             return;
@@ -120,7 +127,7 @@ impl ApplicationHandler for Application {
                     vulkan.dirty.remove(RenderDirty::SWAPCHAIN);
                 }
 
-                vulkan.submit(renderer, layer_stack, [0.0,0.0,0.0,1.0]);
+                vulkan.submit(renderer, layer_stack, [0.0,0.0,0.0,1.0], map);
             },
             WindowEvent::Resized(_size) => {
                 vulkan.dirty.insert(RenderDirty::SWAPCHAIN);
@@ -133,7 +140,6 @@ impl ApplicationHandler for Application {
                 if let winit::event::ElementState::Pressed = event.state {
                     input_state.update_key(event.physical_key, true);
                 } else {
-                    info!("检测到按键抬起，请不要退出应用！");
                     input_state.update_key(event.physical_key, false);
                 }
             },
@@ -171,6 +177,7 @@ impl ApplicationHandler for Application {
             last_time,
             accumulated_time,
             input_state,
+            ..
         } = &mut self.state else {
             return;
         };

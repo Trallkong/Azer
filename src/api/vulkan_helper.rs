@@ -13,7 +13,7 @@ use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::format::Format;
 use vulkano::image::view::ImageView;
-use vulkano::image::{Image, ImageUsage};
+use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
 use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
@@ -320,6 +320,69 @@ pub fn get_graphics_pipeline(
     ).unwrap();
 
     pipeline
+}
+
+pub fn get_default_texture_image_2d(allocator: Arc<StandardMemoryAllocator>) -> Arc<Image> {
+    Image::new(
+        allocator,
+        ImageCreateInfo {
+            image_type: ImageType::Dim2d,
+            format: Format::R8G8B8A8_UNORM,
+            extent: [1, 1, 1],
+            usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
+            ..ImageCreateInfo::default()
+        },
+        AllocationCreateInfo::default(),
+    ).expect("获取默认纹理失败")
+}
+pub fn get_texture_image_2d(size: (u32, u32), format: Format, allocator: Arc<StandardMemoryAllocator>) -> Arc<Image> {
+    Image::new(
+        allocator.clone(),
+        ImageCreateInfo {
+            image_type: ImageType::Dim2d,
+            format,
+            extent: [size.0, size.1, 1],
+            usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
+            ..ImageCreateInfo::default()
+        },
+        AllocationCreateInfo::default(),
+    ).unwrap_or_else(|e| {
+        error!("获取2D纹理图像对象失败，将使用默认纹理: {e}");
+        get_default_texture_image_2d(allocator)
+    })
+}
+
+pub fn get_default_staging(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[u8]> {
+    Buffer::from_iter(
+        allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::TRANSFER_SRC,
+            ..BufferCreateInfo::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..AllocationCreateInfo::default()
+        },
+        [255,255,255,255],
+    ).expect("获取默认纹理缓冲区失败")
+}
+
+pub fn get_staging(pixels: Vec<u8>,allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[u8]> {
+    Buffer::from_iter(
+        allocator.clone(),
+        BufferCreateInfo {
+            usage: BufferUsage::TRANSFER_SRC,
+            ..BufferCreateInfo::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..AllocationCreateInfo::default()
+        },
+        pixels,
+    ).unwrap_or_else(|e| {
+        error!("获取纹理缓冲区失败,将使用默认缓冲区: {e}");
+        get_default_staging(allocator)
+    })
 }
 
 pub struct VulkanHelper;

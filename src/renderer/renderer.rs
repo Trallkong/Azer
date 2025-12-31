@@ -1,17 +1,21 @@
-use vulkano::descriptor_set::DescriptorSet;
-use crate::renderer::shaders::Shader;
 use crate::api::vulkan_helper;
 use crate::core::layer_stack::LayerStack;
 use crate::renderer::frame_commands::FrameCommands;
-use crate::renderer::render_trait::Render;
+use crate::renderer::image_buffer_man::ImageBufferManager;
+use crate::renderer::renderer2d::render_image::RenderImage;
 use crate::renderer::renderer2d::render_rectangle::RenderRectangle;
 use crate::renderer::renderer2d::render_triangle::RenderTriangle;
+use crate::renderer::shaders::upgrade_shader::{Instance, ShaderData};
+use crate::renderer::shaders::Shader;
 use crate::renderer::shapes::transform::Transform2D;
 use glam::Mat4;
-use std::sync::Arc;
 use log::error;
+use std::sync::Arc;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::PrimaryAutoCommandBuffer;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::descriptor_set::DescriptorSet;
+use vulkano::descriptor_set::WriteDescriptorSet;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::{
@@ -20,10 +24,7 @@ use vulkano::{
     device::{Device, Queue},
     render_pass::{Framebuffer, RenderPass}
 };
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use vulkano::descriptor_set::WriteDescriptorSet;
 use winit::window::Window;
-use crate::renderer::shaders::batch_render_shader::{Instance, Instances, ShaderData};
 
 pub struct Allocators {
     pub buffer_allocator: Arc<StandardMemoryAllocator>,
@@ -38,6 +39,7 @@ pub struct RendererContext {
 pub struct Renderer {
     render_triangle: Box<RenderTriangle>,
     render_rectangle: Box<RenderRectangle>,
+    render_image: Box<RenderImage>,
     queue: Arc<Queue>,
     window: Arc<Window>,
     device: Arc<Device>,
@@ -48,7 +50,7 @@ pub struct Renderer {
     allocators: Allocators,
     descriptor_set: Arc<DescriptorSet>,
     shader_data: ShaderData,
-    renderer_context: RendererContext
+    renderer_context: RendererContext,
 }
 
 impl Renderer {
@@ -57,6 +59,7 @@ impl Renderer {
         queue: Arc<Queue>,
         window: Arc<Window>,
         render_pass: Arc<RenderPass>,
+        map: &mut ImageBufferManager
     ) -> Self {
 
         let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
@@ -68,7 +71,7 @@ impl Renderer {
         let descriptor_set_allocator = vulkan_helper::get_descriptor_set_allocator(device.clone());
 
         // 准备着色器
-        let shader = crate::renderer::shaders::batch_render_shader::BatchRenderShader::load(device.clone())
+        let shader = crate::renderer::shaders::upgrade_shader::UpgradeShader::load(device.clone())
             .unwrap_or_else(|e| {
                 error!("着色器创建失败: {}", e);
                 panic!("着色器创建失败");
@@ -76,18 +79,14 @@ impl Renderer {
         let shader = Arc::new(shader);
 
         // 创建数据
-        let camera_data = crate::renderer::shaders::batch_render_shader::CameraData {
-            view_proj: Mat4::IDENTITY.to_cols_array_2d(),
-        };
+        let camera_data = crate::renderer::shaders::upgrade_shader::CameraData::default();
 
         let camera_buffer = vulkan_helper::get_uniform_buffer(
             camera_data,
             Arc::clone(&buffer_allocator),
         );
 
-        let instances = Instances {
-            instances: [Instance::default(); 100]
-        };
+        let instances = crate::renderer::shaders::upgrade_shader::Instances::default();
 
         let instances_buffer = Buffer::from_data(
             buffer_allocator.clone(),
@@ -120,7 +119,7 @@ impl Renderer {
 
         let descriptor_set = DescriptorSet::new(
             descriptor_set_allocator.clone(),
-            set_layout,
+            set_layout.clone(),
             [w1,w2],
             []
         ).unwrap();
@@ -140,24 +139,35 @@ impl Renderer {
             set: descriptor_set.clone(),
         };
 
-
-
         Self {
             render_triangle: Box::new(
                 RenderTriangle::new(
-                    Arc::clone(&device),
-                    Arc::clone(&window),
-                    Arc::clone(&render_pass),
-                    &allocators
+                    &allocators,
+                    descriptor_set.clone(),
+                    pipeline.layout().clone(),
+                    pipeline.layout().set_layouts()[1].clone(),
+                    device.clone(),
+                    map
                 ),
             ),
             render_rectangle: Box::new(
               RenderRectangle::new(
-                  Arc::clone(&device),
-                  Arc::clone(&window),
-                  Arc::clone(&render_pass),
-                  &allocators
+                  &allocators,
+                  descriptor_set.clone(),
+                  pipeline.layout().clone(),
+                  pipeline.layout().set_layouts()[1].clone(),
+                  device.clone(),
+                  map
               )
+            ),
+            render_image: Box::new(
+                RenderImage::new(
+                    &allocators,
+                    device.clone(),
+                    pipeline.layout().set_layouts()[1].clone(),
+                    pipeline.layout().clone(),
+                    descriptor_set.clone(),
+                )
             ),
             queue,
             window,
@@ -171,7 +181,7 @@ impl Renderer {
             shader_data,
             renderer_context: RendererContext {
                 instance_index: 0
-            }
+            },
         }
     }
 
@@ -238,6 +248,20 @@ impl Renderer {
         self.renderer_context.instance_index += 1;
     }
 
+    pub fn draw_image(&mut self, transform: Transform2D, image_path: &str, map: &mut ImageBufferManager) {
+        let ins = Instance {
+            transform: transform.to_mat4().to_cols_array_2d(),
+            color: [1.0, 1.0, 1.0, 1.0],
+        };
+        self.shader_data.add_instance(ins);
+
+        if let Some(frame) = self.frame_commands.as_mut() {
+            self.render_image.draw(frame, self.renderer_context.instance_index, image_path, map);
+        }
+
+        self.renderer_context.instance_index += 1;
+    }
+
     pub fn recreate_pipeline(&mut self) {
         self.pipeline = vulkan_helper::get_graphics_pipeline(
             self.window.clone(),
@@ -251,16 +275,21 @@ impl Renderer {
         &mut self,
         frame_buffer: Arc<Framebuffer>,
         clear_color: [f32; 4],
-        layer_stack: &mut LayerStack
+        layer_stack: &mut LayerStack,
+        map: &mut ImageBufferManager
     ) -> Arc<PrimaryAutoCommandBuffer> {
         let mut frame = FrameCommands::new(self.allocators.command_buffer_allocator.clone(), self.queue.clone());
+
+        // copy_buffer_to_image here!
+        map.copy_all_buffer_to_image(&mut frame);
+        // --------------------------
 
         self.begin(&mut frame, frame_buffer, clear_color);
 
         self.frame_commands = Some(frame);
 
         layer_stack.iter_mut().for_each(|layer| {
-            layer.on_render(self);
+            layer.on_render(self, map);
         });
 
         frame = self.frame_commands.take().unwrap();

@@ -1,4 +1,5 @@
 mod new_layer;
+mod render_layer;
 
 use crate::new_layer::NewLayer;
 use azer::core::{application::Application, logger};
@@ -19,8 +20,9 @@ fn main() {
 
     let mut app: Application = Application::new();
     app.push_layer(Box::new(NewLayer::new()));
+    app.push_layer(Box::new(render_layer::RenderLayer::new()));
 
     event_loop.run_app(&mut app).unwrap();
 
-    thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_millis(500));
 }

@@ -1,10 +1,20 @@
 use glam::{Mat4, Quat, Vec2, Vec3};
 
-#[derive(Default, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct Transform2D {
     pub position: Vec2,
     pub rotation: Quat,
     pub scale: Vec2,
+}
+
+impl Default for Transform2D {
+    fn default() -> Self {
+        Self {
+            position: Vec2::new(0.0,0.0),
+            rotation: Quat::IDENTITY,
+            scale: Vec2::new(1.0,1.0)
+        }
+    }
 }
 
 impl Transform2D {

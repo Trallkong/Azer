@@ -4,10 +4,10 @@ use glam::{Mat4, Vec2, Vec3};
 #[derive(Clone)]
 pub struct Camera2D {
     aspect_ratio: f32,
-    zoom: f32,
+    pub zoom: f32,
     near: f32,
     far: f32,
-    position: Vec2,
+    pub position: Vec2,
 
     view_matrix: Mat4,
     projection_matrix: Mat4,
@@ -33,23 +33,8 @@ impl Camera2D {
         }
     }
 
-    pub fn set_position(&mut self, position: Vec2) {
-        self.position = position;
-    }
-
-    pub fn position(&self) -> Vec2 {
-        self.position
-    }
-
     pub fn set_aspect_ratio(&mut self, aspect_ratio: f32) {
         self.aspect_ratio = aspect_ratio;
-    }
-    pub fn set_zoom(&mut self, zoom: f32) {
-        self.zoom = zoom;
-    }
-
-    pub fn zoom(&self) -> f32 {
-        self.zoom
     }
 
     fn get_projection_matrix(aspect_ratio: f32, zoom: f32, near: f32, far: f32) -> Mat4 {

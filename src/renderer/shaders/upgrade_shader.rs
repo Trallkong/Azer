@@ -1,12 +1,12 @@
+use crate::renderer::shaders::Shader;
+use glam::Mat4;
 use std::fmt::Debug;
 use std::sync::Arc;
-use glam::Mat4;
+use vulkano::buffer::{BufferContents, Subbuffer};
+use vulkano::descriptor_set::DescriptorSet;
 use vulkano::device::Device;
 use vulkano::shader::ShaderModule;
 use vulkano::{Validated, VulkanError};
-use vulkano::buffer::{BufferContents, Subbuffer};
-use vulkano::descriptor_set::DescriptorSet;
-use crate::renderer::shaders::Shader;
 
 mod vs {
     vulkano_shaders::shader! {
@@ -15,6 +15,7 @@ mod vs {
             #version 460
 
             layout(location = 0) in vec2 position;
+            layout(location = 1) in vec2 uv;
 
             layout(set = 0, binding = 0) uniform CameraData {
                 mat4 view_proj;
@@ -26,15 +27,16 @@ mod vs {
             };
 
             layout(set = 0, binding = 1) buffer Instances {
-                Instance instances[100];
+                Instance instances[1000];
             } ds;
 
-            layout(location = 0) out vec4 v_color;
+            layout(location = 0) out vec2 v_uv;
+            layout(location = 1) out vec4 v_color;
 
             void main() {
                 mat4 model = ds.instances[gl_InstanceIndex].transform;
-                vec4 color = ds.instances[gl_InstanceIndex].color;
-                v_color = color;
+                v_uv = uv;
+                v_color = ds.instances[gl_InstanceIndex].color;
                 gl_Position = camera.view_proj * model * vec4(position, 0.0, 1.0);
             }
         "
@@ -47,23 +49,27 @@ mod fs {
         src: r"
             #version 460
 
-            layout(location = 0) in vec4 v_color;
+            layout(location = 0) in vec2 v_uv;
+            layout(location = 1) in vec4 v_color;
+
+            layout(set = 1, binding = 0) uniform sampler2D tex;
+
             layout(location = 0) out vec4 f_color;
 
             void main() {
-                f_color = v_color;
+                f_color = texture(tex, v_uv) * v_color;
             }
         "
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct BatchRenderShader {
+pub struct UpgradeShader {
     pub vs: Arc<ShaderModule>,
     pub fs: Arc<ShaderModule>,
 }
 
-impl Shader for BatchRenderShader {
+impl Shader for UpgradeShader {
     fn fs(&self) -> &Arc<ShaderModule> {
         &self.fs
     }
@@ -76,9 +82,9 @@ impl Shader for BatchRenderShader {
     where
         Self: Sized + Clone + Debug
     {
-        Ok(Self{
+        Ok(Self {
             vs: vs::load(device.clone())?,
-            fs: fs::load(device)?,
+            fs: fs::load(device.clone())?,
         })
     }
 }
@@ -86,27 +92,43 @@ impl Shader for BatchRenderShader {
 #[repr(C)]
 #[derive(BufferContents, Copy, Clone)]
 pub struct CameraData {
-    pub view_proj: [[f32; 4]; 4],
+    pub view_proj: [[f32;4];4],
+}
+
+impl Default for CameraData {
+    fn default() -> Self {
+        CameraData {
+            view_proj: [[1.0;4];4],
+        }
+    }
 }
 
 #[repr(C)]
 #[derive(BufferContents, Copy, Clone)]
 pub struct Instance {
-    pub transform: [[f32; 4]; 4],
-    pub color: [f32; 4],
+    pub transform: [[f32;4];4],
+    pub color: [f32;4],
+}
+
+impl Default for Instance {
+    fn default() -> Self {
+        Instance {
+            transform: [[1.0;4];4],
+            color: [1.0;4],
+        }
+    }
 }
 
 #[repr(C)]
 #[derive(BufferContents, Copy, Clone)]
 pub struct Instances {
-    pub instances: [Instance; 100],
+    pub instances: [Instance; 1000],
 }
 
-impl Default for Instance {
+impl Default for Instances {
     fn default() -> Self {
-        Self {
-            transform: [[1.0; 4]; 4],
-            color: [1.0; 4],
+        Instances {
+            instances: [Instance::default(); 1000],
         }
     }
 }

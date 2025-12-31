@@ -16,7 +16,9 @@ winit = "0.30.12"
 vulkano = "0.35.2"
 vulkano-shaders = "0.35.0"
 
-#math
+# math
 glam = "0.30.9"
 
+# tools
 bitflags = "2.10.0"
+image = "0.25.9"

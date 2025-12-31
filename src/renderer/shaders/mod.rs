@@ -3,9 +3,7 @@ use std::sync::Arc;
 use vulkano::device::Device;
 use vulkano::shader::ShaderModule;
 use vulkano::{Validated, VulkanError};
-
-pub mod sd_camera2d;
-pub mod batch_render_shader;
+pub mod upgrade_shader;
 
 pub trait Shader {
 

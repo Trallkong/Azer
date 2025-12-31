@@ -1,5 +1,6 @@
 use crate::api::vulkan_helper;
 use crate::core::layer_stack::LayerStack;
+use crate::renderer::image_buffer_man::ImageBufferManager;
 use crate::renderer::renderer::Renderer;
 use log::error;
 use std::sync::Arc;
@@ -91,7 +92,7 @@ impl Vulkan {
         }
     }
 
-    pub fn submit(&mut self, renderer: &mut Renderer, layer_stack: &mut LayerStack, clear_color: [f32; 4]) {
+    pub fn submit(&mut self, renderer: &mut Renderer, layer_stack: &mut LayerStack, clear_color: [f32; 4], map: &mut ImageBufferManager) {
 
         let (image_i, suboptimal, acquire_future) =
             match acquire_next_image(self.swapchain.clone(), None)
@@ -114,6 +115,7 @@ impl Vulkan {
             self.frame_buffers[image_i as usize].clone(),
             clear_color,
             layer_stack,
+            map
         );
 
         let execution = sync::now(self.device.clone())
