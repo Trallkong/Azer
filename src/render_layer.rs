@@ -27,7 +27,7 @@ impl Layer for RenderLayer {
         info!("RenderLayer ready!")
     }
 
-    fn on_update(&mut self, _delta: &DeltaTime, _renderer: &mut Renderer, _input: &mut InputState) {
+    fn on_update(&mut self, _delta: &DeltaTime, _input: &mut InputState) {
         self.angle = (self.angle + 0.01) % (2.0 * std::f32::consts::PI);
         self.rotation = Quat::from_rotation_z(self.angle);
     }
@@ -45,9 +45,9 @@ impl Layer for RenderLayer {
             }
         }
 
-        // let mut transform = Transform2D::default();
-        // transform.scale = Vec2::new(0.01, 0.01);
-        // renderer.draw_image(transform, "E:\\Projects\\Azer\\src\\assets\\backgroud.jpg", map);
+        let mut transform = Transform2D::default();
+        transform.scale = Vec2::new(0.01, 0.01);
+        renderer.draw_image(transform, "E:\\360MoveData\\Users\\w1926\\OneDrive\\图片\\Camera Roll\\Snipaste_2025-08-19_01-57-10.png", map);
         // renderer.draw_image(transform, "E:\\Projects\\Azer\\src\\assets\\pic2.png", map);
     }
 

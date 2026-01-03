@@ -173,7 +173,7 @@ impl ApplicationHandler for Application {
             window,
             layer_stack,
             vulkan,
-            renderer,
+
             last_time,
             accumulated_time,
             input_state,
@@ -188,7 +188,7 @@ impl ApplicationHandler for Application {
         *last_time = now;
 
         physics_update(layer_stack, dt, accumulated_time);
-        update(layer_stack, renderer,dt, input_state);
+        update(layer_stack, dt, input_state);
 
         vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
 
@@ -216,6 +216,7 @@ impl Application {
     }
 }
 
+const PHYSICS_DELTA: DeltaTime = DeltaTime::new_const(FIXED_PHYSICS_STEP);
 pub fn physics_update(layer_stack: &mut LayerStack, duration: f64, accumulated_time: &mut f64) {
     let mut step: usize = 0;
     *accumulated_time += duration;
@@ -223,13 +224,13 @@ pub fn physics_update(layer_stack: &mut LayerStack, duration: f64, accumulated_t
         step += 1;
         *accumulated_time -= FIXED_PHYSICS_STEP;
         layer_stack.iter_mut().for_each(|layer| {
-            layer.on_physics_update(&DeltaTime::new(FIXED_PHYSICS_STEP));
+            layer.on_physics_update(&PHYSICS_DELTA);
         })
     }
 }
 
-pub fn update(layer_stack: &mut LayerStack, renderer: &mut Renderer, duration: f64, input: &mut InputState) {
+pub fn update(layer_stack: &mut LayerStack, duration: f64, input: &mut InputState) {
     layer_stack.iter_mut().for_each(|layer| {
-        layer.on_update(&DeltaTime::new(duration), renderer, input);
+        layer.on_update(&DeltaTime::new(duration), input);
     });
 }

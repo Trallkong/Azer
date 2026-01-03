@@ -6,7 +6,7 @@ pub use winit::event::WindowEvent;
 
 pub trait Layer: Send + Sync {
     fn on_ready(&mut self, renderer: &mut Renderer);
-    fn on_update(&mut self, delta: &DeltaTime, renderer: &mut Renderer, input: &mut InputState);
+    fn on_update(&mut self, delta: &DeltaTime, input: &mut InputState);
     fn on_render(&mut self, renderer: &mut Renderer, map: &mut ImageBufferManager);
     fn on_physics_update(&mut self, delta: &DeltaTime);
     fn on_event(&mut self, event: &WindowEvent);

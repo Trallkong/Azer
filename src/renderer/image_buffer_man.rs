@@ -1,33 +1,46 @@
 use crate::renderer::frame_commands::FrameCommands;
 use std::sync::Arc;
+use log::info;
 use vulkano::buffer::Subbuffer;
 use vulkano::command_buffer::CopyBufferToImageInfo;
 use vulkano::image::Image;
 
 pub struct ImageAndBuffer {
     pub image: Arc<Image>,
-    pub buffer: Subbuffer<[u8]>
+    pub buffer: Subbuffer<[u8]>,
+    pub uploaded: bool
 }
 
 #[derive(Default)]
 pub struct ImageBufferManager {
-    pub images_and_buffers: Vec<ImageAndBuffer>
+    pub items: Vec<ImageAndBuffer>,
 }
 
 impl ImageBufferManager {
 
     pub fn add(&mut self, image: Arc<Image>, buffer: Subbuffer<[u8]>) {
-        self.images_and_buffers.push(ImageAndBuffer { image, buffer })
+        info!("push {}", buffer.size());
+        self.items.push(ImageAndBuffer { image, buffer, uploaded: false });
     }
 
     pub fn copy_all_buffer_to_image(&mut self, frame: &mut FrameCommands) {
-        self.images_and_buffers.iter().for_each(|x| {
+        for (i, item) in self.items.iter_mut().enumerate() {
+            if item.uploaded {
+                continue;
+            }
+
+            info!("copying item {i} into gpu image");
+
             frame.builder
-                .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
-                    x.buffer.clone(),
-                    x.image.clone()
-                ))
-                .unwrap();
-        });
+                .copy_buffer_to_image(
+                    CopyBufferToImageInfo::buffer_image(
+                        item.buffer.clone(),
+                        item.image.clone()
+                    )
+                )
+                .expect("copy_buffer_to_image failed");
+
+            item.uploaded = true
+        }
     }
 }

@@ -8,6 +8,10 @@ impl DeltaTime {
         DeltaTime { second: delta }
     }
 
+    pub const fn new_const(delta: f64) -> DeltaTime {
+        DeltaTime { second: delta }
+    }
+
     pub fn as_seconds(&self) -> f64 {
         self.second.max(0.0)
     }

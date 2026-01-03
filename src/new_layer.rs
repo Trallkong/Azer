@@ -32,7 +32,7 @@ impl Layer for NewLayer {
         info!("NewLayer ready");
     }
 
-    fn on_update(&mut self, delta: &DeltaTime, renderer: &mut Renderer, input: &mut InputState) {
+    fn on_update(&mut self, delta: &DeltaTime, input: &mut InputState) {
         let move_speed = 10.0;
         if input.is_key_pressed(KeyCode::KeyW) {
             self.camera.position.y += (move_speed * delta.as_seconds()) as f32;
@@ -60,11 +60,10 @@ impl Layer for NewLayer {
 
 
         self.camera.update();
-        renderer.update_camera(*self.camera.get_view_projection_matrix());
     }
 
-    fn on_render(&mut self, _renderer: &mut Renderer, _map: &mut ImageBufferManager) {
-
+    fn on_render(&mut self, renderer: &mut Renderer, _map: &mut ImageBufferManager) {
+        renderer.update_camera(*self.camera.get_view_projection_matrix());
     }
 
     fn on_physics_update(&mut self, _delta: &DeltaTime) {
