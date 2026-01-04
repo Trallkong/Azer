@@ -11,6 +11,7 @@ use crate::renderer::shapes::transform::Transform2D;
 use glam::Mat4;
 use log::error;
 use std::sync::Arc;
+use imgui::DrawData;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::PrimaryAutoCommandBuffer;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
@@ -24,7 +25,9 @@ use vulkano::{
     device::{Device, Queue},
     render_pass::{Framebuffer, RenderPass}
 };
+use vulkano::pipeline::graphics::viewport::Viewport;
 use winit::window::Window;
+use crate::ui::imgui_renderer::ImGuiRenderer;
 
 pub struct Allocators {
     pub buffer_allocator: Arc<StandardMemoryAllocator>,
@@ -41,13 +44,12 @@ pub struct Renderer {
     render_rectangle: Box<RenderRectangle>,
     render_image: Box<RenderImage>,
     queue: Arc<Queue>,
-    window: Arc<Window>,
     device: Arc<Device>,
     render_pass: Arc<RenderPass>,
     shader: Arc<dyn Shader>,
     pipeline: Arc<GraphicsPipeline>,
     frame_commands: Option<FrameCommands>,
-    allocators: Allocators,
+    pub allocators: Allocators,
     descriptor_set: Arc<DescriptorSet>,
     shader_data: ShaderData,
     renderer_context: RendererContext,
@@ -101,12 +103,18 @@ impl Renderer {
             instances
         ).unwrap();
 
+        let viewport = Viewport {
+            offset: [0.0,0.0],
+            extent: window.inner_size().into(),
+            depth_range: 0.0..=1.0
+        };
+
         // 创建管道
         let pipeline = vulkan_helper::get_graphics_pipeline(
-            Arc::clone(&window),
             Arc::clone(&device),
             Arc::clone(&render_pass),
-            shader.clone()
+            shader.clone(),
+            viewport.clone()
         );
 
         // 从管道获取描述符集布局
@@ -170,7 +178,6 @@ impl Renderer {
                 )
             ),
             queue,
-            window,
             device,
             render_pass,
             shader,
@@ -262,12 +269,12 @@ impl Renderer {
         self.renderer_context.instance_index += 1;
     }
 
-    pub fn recreate_pipeline(&mut self) {
+    pub fn recreate_pipeline(&mut self, viewport: Viewport) {
         self.pipeline = vulkan_helper::get_graphics_pipeline(
-            self.window.clone(),
             self.device.clone(),
             self.render_pass.clone(),
-            self.shader.clone()
+            self.shader.clone(),
+            viewport
         )
     }
 
@@ -276,7 +283,10 @@ impl Renderer {
         frame_buffer: Arc<Framebuffer>,
         clear_color: [f32; 4],
         layer_stack: &mut LayerStack,
-        map: &mut ImageBufferManager
+        map: &mut ImageBufferManager,
+        imgui_renderer: &mut ImGuiRenderer,
+        draw_data: &DrawData,
+        viewport: Viewport
     ) -> Arc<PrimaryAutoCommandBuffer> {
         let mut frame = FrameCommands::new(self.allocators.command_buffer_allocator.clone(), self.queue.clone());
 
@@ -293,6 +303,8 @@ impl Renderer {
         });
 
         frame = self.frame_commands.take().unwrap();
+
+        imgui_renderer.draw(&mut frame, draw_data, viewport);
 
         self.end(&mut frame);
 

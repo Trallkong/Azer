@@ -6,9 +6,11 @@ use azer::renderer::camera::Camera;
 use azer::renderer::image_buffer_man::ImageBufferManager;
 use azer::renderer::renderer::Renderer;
 use glam::Vec2;
+use imgui::Ui;
 use log::info;
 use winit::event::{MouseButton, WindowEvent};
 use winit::keyboard::KeyCode;
+use azer::core::event::Event;
 
 pub struct NewLayer {
     pub camera: Camera2D,
@@ -51,8 +53,8 @@ impl Layer for NewLayer {
             let cur_pos = input.mouse_pos();
             let rx = cur_pos.0 - self.mouse_pos.0;
             let ry = cur_pos.1 - self.mouse_pos.1;
-            self.camera.position.x -= rx as f32 * delta.as_seconds() as f32;
-            self.camera.position.y += ry as f32 * delta.as_seconds() as f32;
+            self.camera.position.x -= rx as f32 * delta.as_seconds() as f32 * self.camera.zoom;
+            self.camera.position.y += ry as f32 * delta.as_seconds() as f32 * self.camera.zoom;
             self.mouse_pos = cur_pos;
         } else {
             self.mouse_pos = input.mouse_pos();
@@ -66,20 +68,26 @@ impl Layer for NewLayer {
         renderer.update_camera(*self.camera.get_view_projection_matrix());
     }
 
+    fn on_imgui_render(&mut self, _ui: &mut Ui) {
+        
+    }
+
     fn on_physics_update(&mut self, _delta: &DeltaTime) {
         // info!("NewLayer physics update");
     }
 
-    fn on_event(&mut self, event: &WindowEvent) {
-        match event {
+    fn on_event(&mut self, event: &Event) {
+        let window_event = &event.event;
+
+        match window_event {
             WindowEvent::MouseWheel {delta,phase, ..} => {
                 if *phase == winit::event::TouchPhase::Started || *phase == winit::event::TouchPhase::Moved {
                     match delta {
                         winit::event::MouseScrollDelta::LineDelta(_, y) => {
-                            self.camera.zoom -= y * 0.1;
+                            self.camera.zoom -= y * 0.05 * self.camera.zoom;
                         },
                         winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                            self.camera.zoom -= pos.y as f32 * 0.1;
+                            self.camera.zoom -= pos.y as f32 * 0.05 * self.camera.zoom;
                         },
                     }
                 }

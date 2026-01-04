@@ -4,6 +4,7 @@ use crate::renderer::image_buffer_man::ImageBufferManager;
 use crate::renderer::renderer::Renderer;
 use log::error;
 use std::sync::Arc;
+use imgui::DrawData;
 use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator,
     device::{Device, Queue},
@@ -18,6 +19,7 @@ use vulkano::{
     VulkanError
 };
 use winit::window::Window;
+use crate::ui::imgui_renderer::ImGuiRenderer;
 
 bitflags::bitflags! {
     pub struct RenderDirty: u32 {
@@ -92,7 +94,15 @@ impl Vulkan {
         }
     }
 
-    pub fn submit(&mut self, renderer: &mut Renderer, layer_stack: &mut LayerStack, clear_color: [f32; 4], map: &mut ImageBufferManager) {
+    pub fn submit(
+        &mut self,
+        renderer: &mut Renderer,
+        layer_stack: &mut LayerStack,
+        clear_color: [f32; 4],
+        map: &mut ImageBufferManager,
+        imgui_renderer: &mut ImGuiRenderer,
+        draw_data: &DrawData
+    ) {
 
         let (image_i, suboptimal, acquire_future) =
             match acquire_next_image(self.swapchain.clone(), None)
@@ -115,7 +125,10 @@ impl Vulkan {
             self.frame_buffers[image_i as usize].clone(),
             clear_color,
             layer_stack,
-            map
+            map,
+            imgui_renderer,
+            draw_data,
+            self.viewport.clone()
         );
 
         let execution = sync::now(self.device.clone())
@@ -164,7 +177,15 @@ impl Vulkan {
         }
 
         if self.dirty.contains(RenderDirty::PIPELINE) {
-            renderer.recreate_pipeline();
+            let viewport = Viewport {
+                offset: [0.0,0.0],
+                extent: window.inner_size().into(),
+                depth_range: 0.0..=1.0
+            };
+
+            self.viewport = viewport.clone();
+
+            renderer.recreate_pipeline(viewport);
             self.dirty.remove(RenderDirty::PIPELINE);
         }
     }

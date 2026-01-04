@@ -262,17 +262,11 @@ where T: BufferContents
 
 /// 获取 GraphicsPipeline
 pub fn get_graphics_pipeline(
-    window: Arc<Window>,
     device: Arc<Device>,
     render_pass: Arc<RenderPass>,
-    shader: Arc<dyn Shader>
+    shader: Arc<dyn Shader>,
+    viewport: Viewport
 ) -> Arc<GraphicsPipeline> {
-    let viewport = Viewport {
-        offset: [0.0, 0.0],
-        extent: window.inner_size().into(),
-        depth_range: 0.0..=1.0,
-    };
-
     let vs = shader.vs().entry_point("main").unwrap();
     let fs = shader.fs().entry_point("main").unwrap();
 

@@ -1,7 +1,6 @@
-mod new_layer;
+mod camera_controller_layer;
 mod render_layer;
 
-use crate::new_layer::NewLayer;
 use azer::core::{application::Application, logger};
 use log::info;
 use std::thread;
@@ -19,7 +18,7 @@ fn main() {
     info!("窗口模块初始化成功！");
 
     let mut app: Application = Application::new();
-    app.push_layer(Box::new(NewLayer::new()));
+    app.push_layer(Box::new(camera_controller_layer::NewLayer::new()));
     app.push_layer(Box::new(render_layer::RenderLayer::new()));
 
     event_loop.run_app(&mut app).unwrap();

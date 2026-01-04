@@ -8,10 +8,14 @@ use crate::renderer::renderer::Renderer;
 use log::info;
 use std::sync::Arc;
 use std::time::Instant;
+use imgui::{Condition, FontConfig, FontSource};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
+use crate::core::event::Event;
+use crate::ui;
+use crate::ui::imgui_renderer::ImGuiRenderer;
 
 const FIXED_PHYSICS_STEP: f64 = 1.0/60.0; // 固定物理步长
 const MAX_PHYSICS_STEPS: usize = 10; // 最大物理步次
@@ -27,9 +31,12 @@ enum AppState {
         renderer: Renderer,
         input_state: InputState,
         map: ImageBufferManager,
+        imgui: imgui::Context,
+        imgui_renderer: ImGuiRenderer,
 
         last_time: Instant,
         accumulated_time: f64,
+        clear_color: [f32; 4]
     }
 }
 
@@ -82,6 +89,26 @@ impl ApplicationHandler for Application {
             // 初始化输入状态
             let input_state = InputState::default();
 
+            // 初始化 ImGui
+            let font_size = 24.0;
+            let mut imgui = imgui::Context::create();
+            imgui.fonts().add_font(&[FontSource::DefaultFontData {
+                config: Some(FontConfig {
+                    size_pixels: font_size,
+                    ..FontConfig::default()
+                })
+            }]);
+
+            let imgui_renderer = ImGuiRenderer::new(
+                window.clone(),
+                vulkan.device.clone(),
+                vulkan.render_pass.clone(),
+                renderer.allocators.buffer_allocator.clone(),
+                renderer.allocators.descriptor_set_allocator.clone(),
+                &mut imgui,
+                &mut map
+            );
+
             // 切换运行状态
             self.state = AppState::Running {
                 window,
@@ -91,7 +118,10 @@ impl ApplicationHandler for Application {
                 last_time: Instant::now(),
                 accumulated_time: 0.0,
                 input_state,
-                map
+                map,
+                imgui,
+                imgui_renderer,
+                clear_color: [0.0,0.0,0.0,1.0]
             }
         }
     }
@@ -103,12 +133,15 @@ impl ApplicationHandler for Application {
             renderer,
             input_state,
             map,
+            imgui,
+            imgui_renderer,
+            clear_color,
             ..
         } = &mut self.state else {
             return;
         };
 
-        // 事件监听
+        // 系统事件处理
         match &event {
             WindowEvent::CloseRequested => {
                 info!("检测到点击关闭按钮，开始清理，请不要退出应用！");
@@ -127,41 +160,97 @@ impl ApplicationHandler for Application {
                     vulkan.dirty.remove(RenderDirty::SWAPCHAIN);
                 }
 
-                vulkan.submit(renderer, layer_stack, [0.0,0.0,0.0,1.0], map);
+                let size = window.inner_size();
+
+                if size.width == 0 || size.height == 0 {
+                    return;
+                }
+
+                let scale = window.scale_factor() as f32;
+
+                let io = imgui.io_mut();
+                io.display_size = [
+                    size.width as f32 / scale,
+                    size.height as f32 / scale,
+                ];
+
+                let ui = imgui.frame();
+
+
+                ui.window("Azer Core")
+                    .size([300.0, 100.0], Condition::FirstUseEver)
+                    .build(|| {
+                        ui.text("Hello, world!");
+                        ui.button("Click me!");
+                        ui.color_edit4("Clear Color", clear_color);
+                    });
+
+                layer_stack.iter_mut().for_each(|layer| {
+                    layer.on_imgui_render(ui);
+                });
+
+                let draw_data = imgui.render();
+
+                vulkan.submit(renderer, layer_stack, *clear_color, map, imgui_renderer, draw_data);
             },
             WindowEvent::Resized(_size) => {
                 vulkan.dirty.insert(RenderDirty::SWAPCHAIN);
                 vulkan.dirty.insert(RenderDirty::PIPELINE);
                 vulkan.dirty.insert(RenderDirty::COMMAND_BUF);
             },
-            WindowEvent::KeyboardInput {
-                event, ..
-            } => {
-                if let winit::event::ElementState::Pressed = event.state {
-                    input_state.update_key(event.physical_key, true);
-                } else {
-                    input_state.update_key(event.physical_key, false);
-                }
-            },
-            WindowEvent::MouseInput {
-                state, button, ..
-            } => {
-                if let winit::event::ElementState::Pressed = state {
-                    input_state.update_mouse(*button, true);
-                } else {
-                    input_state.update_mouse(*button, false);
-                }
-            },
-        WindowEvent::CursorMoved {
-            position, ..
-        } => {
-            input_state.update_mouse_pos(position.x, position.y);
-        }
             _ => ()
         }
 
-        // 事件分发
-        layer_stack.iter_mut().for_each(|layer| layer.on_event(&event));
+        let mut wrapped_event = Event {
+            event: &event,
+            handled: false
+        };
+
+        // 处理 ImGui 事件
+        ui::imgui_winit_support::handle_event(imgui, &mut wrapped_event);
+
+        if wrapped_event.handled {
+            return;
+        }
+
+        // 分发给各层
+        for layer in layer_stack.iter_mut().rev() {
+            layer.on_event(&mut wrapped_event);
+
+            if wrapped_event.handled {
+                break;
+            }
+        }
+
+        // 输入事件处理
+        if !wrapped_event.handled {
+            match &event {
+                WindowEvent::KeyboardInput {
+                    event, ..
+                } => {
+                    if let winit::event::ElementState::Pressed = event.state {
+                        input_state.update_key(event.physical_key, true);
+                    } else {
+                        input_state.update_key(event.physical_key, false);
+                    }
+                },
+                WindowEvent::MouseInput {
+                    state, button, ..
+                } => {
+                    if let winit::event::ElementState::Pressed = state {
+                        input_state.update_mouse(*button, true);
+                    } else {
+                        input_state.update_mouse(*button, false);
+                    }
+                },
+                WindowEvent::CursorMoved {
+                    position, ..
+                } => {
+                    input_state.update_mouse_pos(position.x, position.y);
+                }
+                _ => ()
+            }
+        }
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {

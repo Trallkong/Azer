@@ -5,8 +5,9 @@ use azer::renderer::image_buffer_man::ImageBufferManager;
 use azer::renderer::renderer::Renderer;
 use azer::renderer::shapes::transform::Transform2D;
 use glam::{Quat, Vec2};
+use imgui::Ui;
 use log::info;
-use winit::event::WindowEvent;
+use azer::core::event::Event;
 
 pub struct RenderLayer {
     pub rotation: Quat,
@@ -51,11 +52,15 @@ impl Layer for RenderLayer {
         // renderer.draw_image(transform, "E:\\Projects\\Azer\\src\\assets\\pic2.png", map);
     }
 
+    fn on_imgui_render(&mut self, _ui: &mut Ui) {
+        
+    }
+
     fn on_physics_update(&mut self, _delta: &DeltaTime) {
 
     }
 
-    fn on_event(&mut self, _event: &WindowEvent) {
+    fn on_event(&mut self, _event: &Event) {
 
     }
 

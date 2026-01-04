@@ -15,6 +15,7 @@ winit = "0.30.12"
 # Vulkan
 vulkano = "0.35.2"
 vulkano-shaders = "0.35.0"
+smallvec = "1.13"
 
 # math
 glam = "0.30.9"
@@ -22,3 +23,6 @@ glam = "0.30.9"
 # tools
 bitflags = "2.10.0"
 image = "0.25.9"
+
+# UI
+imgui = "0.12.0"

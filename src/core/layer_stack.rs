@@ -20,11 +20,11 @@ impl LayerStack {
         self.stack.pop()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Box<dyn Layer>> {
+    pub fn iter(&self) -> impl Iterator<Item = &Box<dyn Layer>> + DoubleEndedIterator {
         self.stack.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn Layer>> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn Layer>> + DoubleEndedIterator {
         self.stack.iter_mut()
     }
 
