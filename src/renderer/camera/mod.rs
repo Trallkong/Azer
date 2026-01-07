@@ -1,6 +1,7 @@
 use glam::Mat4;
 
 pub mod camera2d;
+pub mod camera3d;
 
 pub trait Camera {
     fn get_projection_matrix(&self) -> &Mat4;

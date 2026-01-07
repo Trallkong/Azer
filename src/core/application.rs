@@ -1,21 +1,23 @@
 use crate::api::vulkan::{RenderDirty, Vulkan};
+use crate::core::core::print_mem;
 use crate::core::delta_time::DeltaTime;
+use crate::core::event::Event;
 use crate::core::input::InputState;
 use crate::core::layer::Layer;
 use crate::core::layer_stack::LayerStack;
 use crate::renderer::image_buffer_man::ImageBufferManager;
 use crate::renderer::renderer::Renderer;
+use crate::ui;
+use crate::ui::imgui_renderer::ImGuiRenderer;
+use imgui::{Condition, FontConfig, FontGlyphRanges, FontSource};
 use log::info;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
+use std::thread;
 use std::time::Instant;
-use imgui::{Condition, FontConfig, FontSource};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
-use crate::core::event::Event;
-use crate::ui;
-use crate::ui::imgui_renderer::ImGuiRenderer;
 
 const FIXED_PHYSICS_STEP: f64 = 1.0/60.0; // 固定物理步长
 const MAX_PHYSICS_STEPS: usize = 10; // 最大物理步次
@@ -56,6 +58,8 @@ impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         info!("Resuming application");
 
+        print_mem("start init app");
+
         // 获取状态
         let state = std::mem::take(&mut self.state);
 
@@ -69,10 +73,22 @@ impl ApplicationHandler for Application {
                 event_loop.create_window(window_attribute).unwrap()
             );
 
+            print_mem("window initialed");
+
             // 创建 vulkan
             let vulkan = Vulkan::new(window.clone());
 
+            print_mem("vulkan initialed");
+
             let mut map = ImageBufferManager::default();
+
+            print_mem("map initialed");
+
+            let (tx, rx) = mpsc::channel();
+            let handle = thread::spawn(move || {
+                let data = include_bytes!("E:\\Projects\\Azer\\Azer\\src\\assets\\fonts\\MicrosoftYaHei.ttf");
+                let _ = tx.send(data);
+            });
 
             // 创建渲染器
             let mut renderer = Renderer::new(
@@ -82,22 +98,30 @@ impl ApplicationHandler for Application {
                 vulkan.render_pass.clone(),
                 &mut map
             );
+            print_mem("renderer initialed");
+            
+            let _ = handle.join();
+            let data = rx.recv().unwrap();
+            let font_size = 24.0;
+            let mut imgui = imgui::Context::create();
+            imgui.fonts().add_font(&[FontSource::TtfData {
+                data,
+                size_pixels: 30.0,
+                config: Some(FontConfig {
+                    size_pixels: font_size,
+                    glyph_ranges: FontGlyphRanges::chinese_full(),
+                    ..FontConfig::default()
+                })
+            }]);
+            print_mem("imgui initialed");
 
             // 层栈初始化
             layer_stack.iter_mut().for_each(|layer| layer.on_ready(&mut renderer));
 
+            print_mem("layer initialed");
+
             // 初始化输入状态
             let input_state = InputState::default();
-
-            // 初始化 ImGui
-            let font_size = 24.0;
-            let mut imgui = imgui::Context::create();
-            imgui.fonts().add_font(&[FontSource::DefaultFontData {
-                config: Some(FontConfig {
-                    size_pixels: font_size,
-                    ..FontConfig::default()
-                })
-            }]);
 
             let imgui_renderer = ImGuiRenderer::new(
                 window.clone(),
@@ -108,6 +132,8 @@ impl ApplicationHandler for Application {
                 &mut imgui,
                 &mut map
             );
+
+            print_mem("imgui renderer initialed");
 
             // 切换运行状态
             self.state = AppState::Running {
@@ -180,8 +206,6 @@ impl ApplicationHandler for Application {
                 ui.window("Azer Core")
                     .size([300.0, 100.0], Condition::FirstUseEver)
                     .build(|| {
-                        ui.text("Hello, world!");
-                        ui.button("Click me!");
                         ui.color_edit4("Clear Color", clear_color);
                     });
 

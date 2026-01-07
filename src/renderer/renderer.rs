@@ -1,33 +1,34 @@
 use crate::api::vulkan_helper;
+use crate::core::core::new_scope;
 use crate::core::layer_stack::LayerStack;
 use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::image_buffer_man::ImageBufferManager;
+use crate::renderer::renderer2d::render_helper::get_default_set;
 use crate::renderer::renderer2d::render_image::RenderImage;
-use crate::renderer::renderer2d::render_rectangle::RenderRectangle;
-use crate::renderer::renderer2d::render_triangle::RenderTriangle;
-use crate::renderer::shaders::upgrade_shader::{Instance, ShaderData};
+use crate::renderer::shaders::upgrade_shader::{PushConstants, UpgradeShader};
 use crate::renderer::shaders::Shader;
-use crate::renderer::shapes::transform::Transform2D;
+use crate::renderer::shapes::shape_2d::rectangle::Rectangle;
+use crate::renderer::shapes::shape_2d::triangle::Triangle;
+use crate::renderer::shapes::transform::Transform;
+use crate::renderer::shapes::{DrawList, GameObject, Shape};
+use crate::renderer::vertex;
+use crate::ui::imgui_renderer::ImGuiRenderer;
 use glam::Mat4;
+use imgui::DrawData;
 use log::error;
 use std::sync::Arc;
-use imgui::DrawData;
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::PrimaryAutoCommandBuffer;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::DescriptorSet;
-use vulkano::descriptor_set::WriteDescriptorSet;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::pipeline::graphics::viewport::Viewport;
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::{
-    command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo},
-    command_buffer::{RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo},
+    command_buffer::{allocator::StandardCommandBufferAllocator, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo},
     device::{Device, Queue},
     render_pass::{Framebuffer, RenderPass}
 };
-use vulkano::pipeline::graphics::viewport::Viewport;
 use winit::window::Window;
-use crate::ui::imgui_renderer::ImGuiRenderer;
 
 pub struct Allocators {
     pub buffer_allocator: Arc<StandardMemoryAllocator>,
@@ -35,24 +36,19 @@ pub struct Allocators {
     pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
 }
 
-pub struct RendererContext {
-    pub instance_index: usize,
-}
-
 pub struct Renderer {
-    render_triangle: Box<RenderTriangle>,
-    render_rectangle: Box<RenderRectangle>,
     render_image: Box<RenderImage>,
+
     queue: Arc<Queue>,
+    shader: Arc<UpgradeShader>,
     device: Arc<Device>,
     render_pass: Arc<RenderPass>,
-    shader: Arc<dyn Shader>,
     pipeline: Arc<GraphicsPipeline>,
-    frame_commands: Option<FrameCommands>,
     pub allocators: Allocators,
-    descriptor_set: Arc<DescriptorSet>,
-    shader_data: ShaderData,
-    renderer_context: RendererContext,
+
+    draw_list: DrawList,
+    view_proj: [[f32;4];4],
+    default_set: Arc<DescriptorSet>,
 }
 
 impl Renderer {
@@ -63,45 +59,20 @@ impl Renderer {
         render_pass: Arc<RenderPass>,
         map: &mut ImageBufferManager
     ) -> Self {
+        let command_buffer_allocator =
+            vulkan_helper::get_cmd_buffer_allocator(device.clone());
 
-        let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
-            device.clone(),
-            StandardCommandBufferAllocatorCreateInfo::default()
-        ));
+        let buffer_allocator =
+            vulkan_helper::get_mem_allocator(device.clone());
 
-        let buffer_allocator = Arc::new(StandardMemoryAllocator::new_default(Arc::clone(&device)));
         let descriptor_set_allocator = vulkan_helper::get_descriptor_set_allocator(device.clone());
 
         // 准备着色器
-        let shader = crate::renderer::shaders::upgrade_shader::UpgradeShader::load(device.clone())
+        let shader = Arc::new(UpgradeShader::load(device.clone())
             .unwrap_or_else(|e| {
                 error!("着色器创建失败: {}", e);
                 panic!("着色器创建失败");
-            });
-        let shader = Arc::new(shader);
-
-        // 创建数据
-        let camera_data = crate::renderer::shaders::upgrade_shader::CameraData::default();
-
-        let camera_buffer = vulkan_helper::get_uniform_buffer(
-            camera_data,
-            Arc::clone(&buffer_allocator),
-        );
-
-        let instances = crate::renderer::shaders::upgrade_shader::Instances::default();
-
-        let instances_buffer = Buffer::from_data(
-            buffer_allocator.clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::STORAGE_BUFFER,
-                ..BufferCreateInfo::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..AllocationCreateInfo::default()
-            },
-            instances
-        ).unwrap();
+            }));
 
         let viewport = Viewport {
             offset: [0.0,0.0],
@@ -117,21 +88,6 @@ impl Renderer {
             viewport.clone()
         );
 
-        // 从管道获取描述符集布局
-        let set_layout = pipeline.layout().set_layouts().get(0).unwrap().clone();
-
-        // 创建描述符集
-
-        let w1 = WriteDescriptorSet::buffer(0, camera_buffer.clone());
-        let w2 = WriteDescriptorSet::buffer(1, instances_buffer.clone());
-
-        let descriptor_set = DescriptorSet::new(
-            descriptor_set_allocator.clone(),
-            set_layout.clone(),
-            [w1,w2],
-            []
-        ).unwrap();
-
         // 创建内存分配集
         let allocators = Allocators {
             buffer_allocator,
@@ -139,67 +95,38 @@ impl Renderer {
             command_buffer_allocator,
         };
 
-        // 创建着色器上下文
-        let shader_data = ShaderData {
-            camera_buffer,
-            instances_buffer,
-            instance_index: 0,
-            set: descriptor_set.clone(),
-        };
+        let default_set = get_default_set(
+            allocators.buffer_allocator.clone(),
+            device.clone(),
+            allocators.descriptor_set_allocator.clone(),
+            pipeline.layout().set_layouts()[0].clone(),
+            map
+        );
 
         Self {
-            render_triangle: Box::new(
-                RenderTriangle::new(
-                    &allocators,
-                    descriptor_set.clone(),
-                    pipeline.layout().clone(),
-                    pipeline.layout().set_layouts()[1].clone(),
-                    device.clone(),
-                    map
-                ),
-            ),
-            render_rectangle: Box::new(
-              RenderRectangle::new(
-                  &allocators,
-                  descriptor_set.clone(),
-                  pipeline.layout().clone(),
-                  pipeline.layout().set_layouts()[1].clone(),
-                  device.clone(),
-                  map
-              )
-            ),
-            render_image: Box::new(
-                RenderImage::new(
-                    &allocators,
-                    device.clone(),
-                    pipeline.layout().set_layouts()[1].clone(),
-                    pipeline.layout().clone(),
-                    descriptor_set.clone(),
-                )
-            ),
+            render_image: Box::new(RenderImage::new(
+                device.clone(),
+                pipeline.layout().set_layouts()[0].clone(),
+                allocators.buffer_allocator.clone(),
+                allocators.descriptor_set_allocator.clone()
+            )),
             queue,
+            shader,
             device,
             render_pass,
-            shader,
             pipeline,
-            frame_commands: None,
             allocators,
-            descriptor_set,
-            shader_data,
-            renderer_context: RendererContext {
-                instance_index: 0
-            },
+            draw_list: DrawList::default(),
+            view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+            default_set,
         }
     }
 
     pub fn update_camera(&mut self, view_projection_matrix: Mat4) {
-        self.shader_data.update_camera_buffer(view_projection_matrix);
+        self.view_proj = view_projection_matrix.to_cols_array_2d();
     }
 
     fn begin(&mut self, frame: &mut FrameCommands, framebuffer: Arc<Framebuffer>, clear_color: [f32; 4], ) {
-        self.shader_data.begin_frame();
-        self.renderer_context.instance_index = 0;
-
         frame.builder
             .begin_render_pass(
                 RenderPassBeginInfo {
@@ -211,12 +138,6 @@ impl Renderer {
                     ..SubpassBeginInfo::default()
                 }
             ).unwrap()
-            .bind_descriptor_sets(
-                PipelineBindPoint::Graphics,
-                self.pipeline.layout().clone(),
-                0,
-                self.descriptor_set.clone(),
-            ).unwrap()
             .bind_pipeline_graphics(self.pipeline.clone())
             .unwrap();
     }
@@ -225,48 +146,61 @@ impl Renderer {
         frame.builder
             .end_render_pass(SubpassEndInfo::default())
             .unwrap();
+
+        self.draw_list.clear();
     }
 
-    pub fn draw_triangle(&mut self, transform: Transform2D, color: [f32; 4]) {
-        let ins = Instance {
+    pub fn draw_triangle(&mut self, transform: Transform, color: [f32; 4]) {
+        let triangle = Triangle::new();
+
+        let mut mesh = triangle.mesh().get_transformed_mesh(&transform);
+        mesh.set_color(color);
+
+        let obj = GameObject {
+            vertex_len: mesh.vertices.len() as u32,
+            index_count: mesh.indices.len() as u32,
             transform: transform.to_mat4().to_cols_array_2d(),
-            color,
+            set: self.default_set.clone(),
         };
-        self.shader_data.add_instance(ins);
 
-        if let Some(frame) = self.frame_commands.as_mut() {
-            self.render_triangle.draw(frame, self.renderer_context.instance_index);
-        }
-
-        self.renderer_context.instance_index += 1;
+        self.draw_list.vertices.extend(mesh.vertices);
+        self.draw_list.indices.extend(mesh.indices);
+        self.draw_list.objects.push(new_scope(obj));
     }
 
-    pub fn draw_rectangle(&mut self, transform: Transform2D, color: [f32; 4]) {
-        let ins = Instance {
+    pub fn draw_rectangle(&mut self, transform: Transform, color: [f32; 4]) {
+        let rectangle = Rectangle::new();
+
+        let mut mesh = rectangle.mesh().get_transformed_mesh(&transform);
+        mesh.set_color(color);
+
+        let obj = GameObject {
+            vertex_len: mesh.vertices.len() as u32,
+            index_count: mesh.indices.len() as u32,
             transform: transform.to_mat4().to_cols_array_2d(),
-            color,
+            set: self.default_set.clone(),
         };
-        self.shader_data.add_instance(ins);
 
-        if let Some(frame) = self.frame_commands.as_mut() {
-            self.render_rectangle.draw(frame, self.renderer_context.instance_index);
-        }
-
-        self.renderer_context.instance_index += 1;
+        self.draw_list.vertices.extend(mesh.vertices);
+        self.draw_list.indices.extend(mesh.indices);
+        self.draw_list.objects.push(new_scope(obj));
     }
 
-    pub fn draw_image(&mut self, transform: Transform2D, image_path: &str, map: &mut ImageBufferManager) {
-        let ins = Instance {
-            transform: transform.to_mat4().to_cols_array_2d(),
-            color: [1.0, 1.0, 1.0, 1.0],
-        };
-        self.shader_data.add_instance(ins);
+    pub fn draw_image(&mut self, transform: Transform, image_path: &str, map: &mut ImageBufferManager) {
+        if let Some(rect) = self.render_image.import_image(image_path, map) {
+            let mesh = rect.mesh().get_transformed_mesh(&transform);
 
-        if let Some(frame) = self.frame_commands.as_mut() {
-            self.render_image.draw(frame, self.renderer_context.instance_index, image_path, map);
+            let obj = GameObject {
+                vertex_len: mesh.vertices.len() as u32,
+                index_count: mesh.indices.len() as u32,
+                transform: transform.to_mat4().to_cols_array_2d(),
+                set: self.render_image.set_sampler(image_path),
+            };
+
+            self.draw_list.vertices.extend(mesh.vertices);
+            self.draw_list.indices.extend(mesh.indices);
+            self.draw_list.objects.push(new_scope(obj));
         }
-
-        self.renderer_context.instance_index += 1;
     }
 
     pub fn recreate_pipeline(&mut self, viewport: Viewport) {
@@ -276,6 +210,45 @@ impl Renderer {
             self.shader.clone(),
             viewport
         )
+    }
+
+    pub fn draw(&mut self, frame: &mut FrameCommands) {
+        let vbo = vertex::get_vbo_2d(self.draw_list.vertices.clone(), self.allocators.buffer_allocator.clone());
+        let ibo = vertex::get_ibo_2d(self.draw_list.indices.clone(), self.allocators.buffer_allocator.clone());
+
+        frame.builder
+            .bind_vertex_buffers(0, vbo)
+            .unwrap()
+            .bind_index_buffer(ibo)
+            .unwrap();
+
+        let mut vertex_offset = 0;
+        let mut index_offset = 0;
+
+        for obj in self.draw_list.objects.iter() {
+
+            unsafe {
+                frame.builder
+                    .push_constants(self.pipeline.layout().clone(), 0, 
+                        PushConstants {
+                            view_proj: self.view_proj,
+                            transform: obj.transform,
+                    })
+                    .unwrap()
+                    .bind_descriptor_sets(
+                        PipelineBindPoint::Graphics,
+                        self.pipeline.layout().clone(),
+                        0,
+                        obj.set.clone()
+                    )
+                    .unwrap()
+                    .draw_indexed(obj.index_count, 1, index_offset, vertex_offset, 0)
+                    .unwrap();
+            }
+
+            vertex_offset += obj.vertex_len as i32;
+            index_offset += obj.index_count;
+        }
     }
 
     pub fn render_frame(
@@ -290,23 +263,22 @@ impl Renderer {
     ) -> Arc<PrimaryAutoCommandBuffer> {
         let mut frame = FrameCommands::new(self.allocators.command_buffer_allocator.clone(), self.queue.clone());
 
-        // copy_buffer_to_image here!
-        map.copy_all_buffer_to_image(&mut frame);
-        // --------------------------
-
         self.begin(&mut frame, frame_buffer, clear_color);
-
-        self.frame_commands = Some(frame);
 
         layer_stack.iter_mut().for_each(|layer| {
             layer.on_render(self, map);
         });
 
-        frame = self.frame_commands.take().unwrap();
+        self.draw(&mut frame);
 
         imgui_renderer.draw(&mut frame, draw_data, viewport);
 
         self.end(&mut frame);
+
+        // copy_buffer_to_image here!
+        map.copy_all_buffer_to_image(&mut frame);
+        // --------------------------
+        map.clear();
 
         frame.builder.build().unwrap()
     }

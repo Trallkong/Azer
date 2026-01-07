@@ -1,36 +1,37 @@
-use std::fmt::Debug;
-use std::sync::Arc;
-use imgui::{DrawCmd, DrawIdx};
-use log::error;
-use smallvec::smallvec;
-use vulkano::{
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
-    device::Device,
-    image::sampler::{Sampler, SamplerCreateInfo},
-    image::view::ImageView,
-    pipeline::graphics::vertex_input::{Vertex, VertexDefinition},
-    pipeline::graphics::viewport::{Scissor, Viewport, ViewportState},
-    pipeline::{DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo},
-    pipeline::graphics::color_blend::{AttachmentBlend, BlendFactor, BlendOp, ColorBlendAttachmentState, ColorBlendState},
-    pipeline::graphics::GraphicsPipelineCreateInfo,
-    pipeline::graphics::input_assembly::InputAssemblyState,
-    pipeline::graphics::multisample::MultisampleState,
-    pipeline::graphics::rasterization::RasterizationState,
-    pipeline::layout::PipelineDescriptorSetLayoutCreateInfo,
-    render_pass::{RenderPass, Subpass},
-    shader::ShaderModule,
-    Validated,
-    VulkanError,
-    descriptor_set::allocator::StandardDescriptorSetAllocator,
-    descriptor_set::{DescriptorSet, WriteDescriptorSet},
-    format::Format,
-    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator}
-};
-use winit::window::Window;
 use crate::api::vulkan_helper;
+use crate::core::core::print_mem;
 use crate::renderer::frame_commands::FrameCommands;
 use crate::renderer::image_buffer_man::ImageBufferManager;
 use crate::renderer::shaders::Shader;
+use imgui::{DrawCmd, DrawIdx};
+use log::error;
+use smallvec::smallvec;
+use std::fmt::Debug;
+use std::sync::Arc;
+use vulkano::{
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    descriptor_set::allocator::StandardDescriptorSetAllocator,
+    descriptor_set::{DescriptorSet, WriteDescriptorSet},
+    device::Device,
+    format::Format,
+    image::sampler::{Sampler, SamplerCreateInfo},
+    image::view::ImageView,
+    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
+    pipeline::graphics::color_blend::{AttachmentBlend, BlendFactor, BlendOp, ColorBlendAttachmentState, ColorBlendState},
+    pipeline::graphics::input_assembly::InputAssemblyState,
+    pipeline::graphics::multisample::MultisampleState,
+    pipeline::graphics::rasterization::RasterizationState,
+    pipeline::graphics::vertex_input::{Vertex, VertexDefinition},
+    pipeline::graphics::viewport::{Scissor, Viewport, ViewportState},
+    pipeline::graphics::GraphicsPipelineCreateInfo,
+    pipeline::layout::PipelineDescriptorSetLayoutCreateInfo,
+    pipeline::{DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo},
+    render_pass::{RenderPass, Subpass},
+    shader::ShaderModule,
+    Validated,
+    VulkanError
+};
+use winit::window::Window;
 
 mod vs {
     vulkano_shaders::shader! {
@@ -155,7 +156,9 @@ impl ImGuiRenderer {
         let fonts = imgui.fonts();
         let atlas = fonts.build_rgba32_texture();
 
+        print_mem("before imgui renderer staging");
         let staging = vulkan_helper::get_staging(atlas.data.into(), memory_allocator.clone());
+        print_mem("after imgui renderer staging");
 
         let image = vulkan_helper::get_texture_image_2d((atlas.width, atlas.height), Format::R8G8B8A8_UNORM ,memory_allocator.clone());
         let view = ImageView::new_default(image.clone()).unwrap();

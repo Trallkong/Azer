@@ -3,11 +3,10 @@ mod render_layer;
 
 use azer::core::{application::Application, logger};
 use log::info;
-use std::thread;
-use std::time::Duration;
 use winit::event_loop::{ControlFlow, EventLoop};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // 日志模块
     logger::init_logger();
     info!("日志模块初始化成功！");
@@ -22,6 +21,4 @@ fn main() {
     app.push_layer(Box::new(render_layer::RenderLayer::new()));
 
     event_loop.run_app(&mut app).unwrap();
-
-    thread::sleep(Duration::from_millis(500));
 }

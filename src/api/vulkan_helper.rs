@@ -1,11 +1,10 @@
 use crate::renderer::shaders::Shader;
-use crate::renderer::vertex::Vertex2D;
+use crate::renderer::shapes::mesh::AzerVertex;
 use log::error;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
 use vulkano::descriptor_set::allocator::{StandardDescriptorSetAllocator, StandardDescriptorSetAllocatorCreateInfo};
 use vulkano::descriptor_set::layout::{DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType};
 use vulkano::descriptor_set::DescriptorSet;
@@ -270,7 +269,7 @@ pub fn get_graphics_pipeline(
     let vs = shader.vs().entry_point("main").unwrap();
     let fs = shader.fs().entry_point("main").unwrap();
 
-    let vertex_input_state = Vertex2D::per_vertex()
+    let vertex_input_state = AzerVertex::per_vertex()
         .definition(&vs)
         .unwrap_or_else(|e| {
             error!("获取顶点输入状态失败: {}", e);
@@ -379,63 +378,17 @@ pub fn get_staging(pixels: Vec<u8>,allocator: Arc<StandardMemoryAllocator>) -> S
     })
 }
 
-pub struct VulkanHelper;
+/// 获取 CommandBuffer Allocator
+pub fn get_cmd_buffer_allocator(device: Arc<Device>) -> Arc<StandardCommandBufferAllocator> {
+    Arc::new(StandardCommandBufferAllocator::new(
+        device.clone(),
+        StandardCommandBufferAllocatorCreateInfo::default()
+    ))
+}
 
-impl VulkanHelper {
-
-    pub fn create_command_buffers(
-        device: Arc<Device>,
-        queue: Arc<Queue>,
-        framebuffers: Vec<Arc<Framebuffer>>,
-        pipeline: Arc<GraphicsPipeline>,
-        vertex_buffer: Subbuffer<[Vertex2D]>) -> Vec<Arc<PrimaryAutoCommandBuffer>> {
-
-        let allocator = Arc::new(StandardCommandBufferAllocator::new(
-            device.clone(),
-            StandardCommandBufferAllocatorCreateInfo::default()
-        ));
-
-        let mut command_buffers: Vec<Arc<PrimaryAutoCommandBuffer>> = Vec::new();
-        framebuffers.into_iter().for_each(|framebuffer| {
-            let mut builder =
-                AutoCommandBufferBuilder::primary(
-                    allocator.clone(),
-                    queue.queue_family_index(),
-                    CommandBufferUsage::OneTimeSubmit,
-                ).unwrap();
-
-            unsafe {
-                builder
-                    .begin_render_pass(
-                        RenderPassBeginInfo {
-                            clear_values: vec![Some([0.1, 0.1, 0.1, 1.0].into())],
-                            ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
-                        },
-                        SubpassBeginInfo {
-                            contents: SubpassContents::Inline,
-                            ..SubpassBeginInfo::default()
-                        },
-                    )
-                    .unwrap()
-                    .bind_pipeline_graphics(pipeline.clone())
-                    .unwrap()
-                    .bind_vertex_buffers(0, vertex_buffer.clone())
-                    .unwrap()
-                    .draw(
-                        3, 1, 0, 0,
-                    )
-                    .unwrap()
-                    .end_render_pass(SubpassEndInfo::default())
-                    .unwrap();
-            }
-
-            let command_buffer = builder.build().unwrap();
-
-            command_buffers.push(command_buffer);
-        });
-
-        command_buffers
-    }
+/// 获取 Memory Allocator
+pub fn get_mem_allocator(device: Arc<Device>) -> Arc<StandardMemoryAllocator> {
+    Arc::new(StandardMemoryAllocator::new_default(device.clone()))
 }
 
 /// 判断某个物理设备是否符合需求并返回队列索引

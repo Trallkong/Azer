@@ -2,9 +2,10 @@ use crate::api::vulkan_helper;
 use crate::core::layer_stack::LayerStack;
 use crate::renderer::image_buffer_man::ImageBufferManager;
 use crate::renderer::renderer::Renderer;
+use crate::ui::imgui_renderer::ImGuiRenderer;
+use imgui::DrawData;
 use log::error;
 use std::sync::Arc;
-use imgui::DrawData;
 use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator,
     device::{Device, Queue},
@@ -19,7 +20,6 @@ use vulkano::{
     VulkanError
 };
 use winit::window::Window;
-use crate::ui::imgui_renderer::ImGuiRenderer;
 
 bitflags::bitflags! {
     pub struct RenderDirty: u32 {

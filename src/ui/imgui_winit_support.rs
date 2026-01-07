@@ -1,6 +1,6 @@
+use crate::core::event::Event;
 use winit::event::ElementState::Pressed;
 use winit::event::WindowEvent;
-use crate::core::event::Event;
 
 pub fn handle_event(imgui: &mut imgui::Context, event: &mut Event) {
     if event.handled {
