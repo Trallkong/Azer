@@ -1,32 +1,5 @@
-[package]
-name = "azer"
-version = "0.1.1"
-edition = "2024"
-
-[dependencies]
-# Logger
-chrono = "0.4.41"
-log = "0.4.27"
-env_logger = "0.11.8"
-
-# Window
-winit = "0.30.12"
-
-# Vulkan
-vulkano = "0.35.2"
-vulkano-shaders = "0.35.0"
-smallvec = "1.13"
-
-# math
-glam = "0.30.9"
-
-# tools
-bitflags = "2.10.0"
-image = "0.25.9"
-
-# UI
-imgui = "0.12.0"
-windows-sys = { version = "0.61.2", features = ["Win32_System_ProcessStatus", "Win32_System_Threading"] }
-
-# Thread
-tokio = { version = "1", features = ["full"] }
+[workspace]
+members = [
+    "azer",
+    "azer-editor"
+]
