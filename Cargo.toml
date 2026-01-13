@@ -3,3 +3,5 @@ members = [
     "azer",
     "azer-editor"
 ]
+
+resolver = "3"
