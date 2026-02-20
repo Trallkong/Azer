@@ -2,8 +2,6 @@ use crate::api::vulkan_helper;
 use crate::core::layer_stack::LayerStack;
 use crate::renderer::image_buffer_man::ImageBufferManager;
 use crate::renderer::renderer::Renderer;
-use crate::ui::imgui_renderer::ImGuiRenderer;
-use imgui::DrawData;
 use log::error;
 use std::sync::Arc;
 use vulkano::{
@@ -100,8 +98,6 @@ impl Vulkan {
         layer_stack: &mut LayerStack,
         clear_color: [f32; 4],
         map: &mut ImageBufferManager,
-        imgui_renderer: &mut ImGuiRenderer,
-        draw_data: &DrawData
     ) {
 
         let (image_i, suboptimal, acquire_future) =
@@ -126,8 +122,6 @@ impl Vulkan {
             clear_color,
             layer_stack,
             map,
-            imgui_renderer,
-            draw_data,
             self.viewport.clone()
         );
 

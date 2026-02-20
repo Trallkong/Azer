@@ -12,9 +12,7 @@ use crate::renderer::shapes::shape_2d::triangle::Triangle;
 use crate::renderer::shapes::transform::Transform;
 use crate::renderer::shapes::{DrawList, GameObject, Shape};
 use crate::renderer::vertex;
-use crate::ui::imgui_renderer::ImGuiRenderer;
 use glam::Mat4;
-use imgui::DrawData;
 use log::error;
 use std::sync::Arc;
 use vulkano::command_buffer::PrimaryAutoCommandBuffer;
@@ -257,8 +255,6 @@ impl Renderer {
         clear_color: [f32; 4],
         layer_stack: &mut LayerStack,
         map: &mut ImageBufferManager,
-        imgui_renderer: &mut ImGuiRenderer,
-        draw_data: &DrawData,
         viewport: Viewport
     ) -> Arc<PrimaryAutoCommandBuffer> {
         let mut frame = FrameCommands::new(self.allocators.command_buffer_allocator.clone(), self.queue.clone());
@@ -270,8 +266,6 @@ impl Renderer {
         });
 
         self.draw(&mut frame);
-
-        imgui_renderer.draw(&mut frame, draw_data, viewport);
 
         self.end(&mut frame);
 

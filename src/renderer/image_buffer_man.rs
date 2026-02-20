@@ -24,6 +24,8 @@ impl ImageBufferManager {
     }
 
     pub fn copy_all_buffer_to_image(&mut self, frame: &mut FrameCommands) {
+        let mut items_to_remove = Vec::new();
+
         for (i, item) in self.items.iter_mut().enumerate() {
             if let Some(buffer) = item.buffer.take() {
                 info!("copying item {i} into gpu image");
@@ -37,7 +39,10 @@ impl ImageBufferManager {
                     )
                     .expect("copy_buffer_to_image failed");
             }
+            items_to_remove.push(i);
         }
+
+        self.items.clear();
     }
 
     pub fn clear(&mut self) {

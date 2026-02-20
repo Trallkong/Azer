@@ -7,7 +7,6 @@ use azer::renderer::camera::Camera;
 use azer::renderer::image_buffer_man::ImageBufferManager;
 use azer::renderer::renderer::Renderer;
 use glam::Vec2;
-use imgui::{Condition, Ui};
 use log::info;
 use winit::event::{MouseButton, WindowEvent};
 use winit::keyboard::KeyCode;
@@ -70,15 +69,6 @@ impl Layer for NewLayer {
 
     fn on_render(&mut self, renderer: &mut Renderer, _map: &mut ImageBufferManager) {
         renderer.update_camera(*self.camera.get_view_projection_matrix());
-    }
-
-    fn on_imgui_render(&mut self, ui: &mut Ui) {
-        ui.window("相机控制器")
-            .size([300.0, 100.0],Condition::FirstUseEver)
-            .build(|| {
-                ui.slider("缩放速度", 1, 10, &mut self.zoom_speed);
-                ui.slider("拖拽力度", 1, 10, &mut self.drag_speed);
-            });
     }
 
     fn on_physics_update(&mut self, _delta: &DeltaTime) {

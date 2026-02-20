@@ -6,7 +6,6 @@ use azer::renderer::image_buffer_man::ImageBufferManager;
 use azer::renderer::renderer::Renderer;
 use azer::renderer::shapes::transform::Transform;
 use glam::{Quat, Vec3};
-use imgui::Ui;
 use log::info;
 
 pub struct RenderLayer {
@@ -33,7 +32,7 @@ impl Layer for RenderLayer {
         self.rotation = Quat::from_rotation_z(self.angle);
     }
 
-    fn on_render(&mut self, renderer: &mut Renderer, map: &mut ImageBufferManager) {
+    fn on_render(&mut self, renderer: &mut Renderer, _map: &mut ImageBufferManager) {
         for i in 0..5 {
             for j in 0..5 {
                 let mut transform = Transform::default();
@@ -46,14 +45,6 @@ impl Layer for RenderLayer {
                 }
             }
         }
-
-        let mut transform = Transform::default();
-        transform.scale = Vec3::new(0.1,0.1, 1.0);
-        renderer.draw_image(transform, "E:\\360MoveData\\Users\\w1926\\OneDrive\\图片\\Camera Roll\\Snipaste_2025-08-19_01-57-10.png", map);
-    }
-
-    fn on_imgui_render(&mut self, _ui: &mut Ui) {
-        
     }
 
     fn on_physics_update(&mut self, _delta: &DeltaTime) {

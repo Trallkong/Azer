@@ -10,11 +10,10 @@ use vulkano::descriptor_set::layout::{DescriptorSetLayout, DescriptorSetLayoutBi
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
-use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
 use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator, GenericMemoryAllocatorCreateInfo};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
@@ -122,7 +121,7 @@ pub fn get_swapchain_and_images(
     win: Arc<Window>,
 ) -> (Arc<Swapchain>, Vec<Arc<Image>>) {
     let swapchain_create_info = SwapchainCreateInfo {
-        image_format: Format::R8G8B8A8_UNORM,
+        image_format: vulkano::format::Format::R8G8B8A8_UNORM,
         image_extent: win.inner_size().into(),
         image_usage: ImageUsage::COLOR_ATTACHMENT,
         present_mode: PresentMode::Fifo,
@@ -149,7 +148,7 @@ pub fn get_command_buffer_allocator(
 /// 获取 RenderPass
 pub fn get_render_pass(
     device: Arc<Device>,
-    format: Format,
+    format: vulkano::format::Format,
 ) -> Arc<RenderPass> {
     let render_pass = single_pass_renderpass!(
         device,
@@ -320,7 +319,7 @@ pub fn get_default_texture_image_2d(allocator: Arc<StandardMemoryAllocator>) -> 
         allocator,
         ImageCreateInfo {
             image_type: ImageType::Dim2d,
-            format: Format::R8G8B8A8_UNORM,
+            format: vulkano::format::Format::R8G8B8A8_UNORM,
             extent: [1, 1, 1],
             usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
             ..ImageCreateInfo::default()
@@ -328,7 +327,7 @@ pub fn get_default_texture_image_2d(allocator: Arc<StandardMemoryAllocator>) -> 
         AllocationCreateInfo::default(),
     ).expect("获取默认纹理失败")
 }
-pub fn get_texture_image_2d(size: (u32, u32), format: Format, allocator: Arc<StandardMemoryAllocator>) -> Arc<Image> {
+pub fn get_texture_image_2d(size: (u32, u32), format: vulkano::format::Format, allocator: Arc<StandardMemoryAllocator>) -> Arc<Image> {
     Image::new(
         allocator.clone(),
         ImageCreateInfo {
@@ -387,8 +386,21 @@ pub fn get_cmd_buffer_allocator(device: Arc<Device>) -> Arc<StandardCommandBuffe
 }
 
 /// 获取 Memory Allocator
+/// 使用较小的块大小以减少内存占用
 pub fn get_mem_allocator(device: Arc<Device>) -> Arc<StandardMemoryAllocator> {
-    Arc::new(StandardMemoryAllocator::new_default(device.clone()))
+    let physical_device = device.physical_device();
+    let memory_type_count = physical_device.memory_properties().memory_types.len();
+    
+    let block_size = 16 * 1024 * 1024; // 16 MB per block instead of default 256 MB
+    let block_sizes = vec![block_size; memory_type_count];
+    
+    Arc::new(StandardMemoryAllocator::new(
+        device.clone(),
+        GenericMemoryAllocatorCreateInfo {
+            block_sizes: &block_sizes,
+            ..GenericMemoryAllocatorCreateInfo::default()
+        },
+    ))
 }
 
 /// 判断某个物理设备是否符合需求并返回队列索引

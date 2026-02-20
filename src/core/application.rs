@@ -7,12 +7,8 @@ use crate::core::layer::Layer;
 use crate::core::layer_stack::LayerStack;
 use crate::renderer::image_buffer_man::ImageBufferManager;
 use crate::renderer::renderer::Renderer;
-use crate::ui;
-use crate::ui::imgui_renderer::ImGuiRenderer;
-use imgui::{Condition, FontConfig, FontGlyphRanges, FontSource};
 use log::info;
-use std::sync::{mpsc, Arc};
-use std::thread;
+use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -33,8 +29,6 @@ enum AppState {
         renderer: Renderer,
         input_state: InputState,
         map: ImageBufferManager,
-        imgui: imgui::Context,
-        imgui_renderer: ImGuiRenderer,
 
         last_time: Instant,
         accumulated_time: f64,
@@ -84,12 +78,6 @@ impl ApplicationHandler for Application {
 
             print_mem("map initialed");
 
-            let (tx, rx) = mpsc::channel();
-            let handle = thread::spawn(move || {
-                let data = include_bytes!("E:\\Projects\\Azer\\Azer\\src\\assets\\fonts\\MicrosoftYaHei.ttf");
-                let _ = tx.send(data);
-            });
-
             // 创建渲染器
             let mut renderer = Renderer::new(
                 vulkan.device.clone(),
@@ -99,21 +87,6 @@ impl ApplicationHandler for Application {
                 &mut map
             );
             print_mem("renderer initialed");
-            
-            let _ = handle.join();
-            let data = rx.recv().unwrap();
-            let font_size = 24.0;
-            let mut imgui = imgui::Context::create();
-            imgui.fonts().add_font(&[FontSource::TtfData {
-                data,
-                size_pixels: 30.0,
-                config: Some(FontConfig {
-                    size_pixels: font_size,
-                    glyph_ranges: FontGlyphRanges::chinese_full(),
-                    ..FontConfig::default()
-                })
-            }]);
-            print_mem("imgui initialed");
 
             // 层栈初始化
             layer_stack.iter_mut().for_each(|layer| layer.on_ready(&mut renderer));
@@ -122,18 +95,6 @@ impl ApplicationHandler for Application {
 
             // 初始化输入状态
             let input_state = InputState::default();
-
-            let imgui_renderer = ImGuiRenderer::new(
-                window.clone(),
-                vulkan.device.clone(),
-                vulkan.render_pass.clone(),
-                renderer.allocators.buffer_allocator.clone(),
-                renderer.allocators.descriptor_set_allocator.clone(),
-                &mut imgui,
-                &mut map
-            );
-
-            print_mem("imgui renderer initialed");
 
             // 切换运行状态
             self.state = AppState::Running {
@@ -145,8 +106,6 @@ impl ApplicationHandler for Application {
                 accumulated_time: 0.0,
                 input_state,
                 map,
-                imgui,
-                imgui_renderer,
                 clear_color: [0.0,0.0,0.0,1.0]
             }
         }
@@ -159,8 +118,6 @@ impl ApplicationHandler for Application {
             renderer,
             input_state,
             map,
-            imgui,
-            imgui_renderer,
             clear_color,
             ..
         } = &mut self.state else {
@@ -192,30 +149,7 @@ impl ApplicationHandler for Application {
                     return;
                 }
 
-                let scale = window.scale_factor() as f32;
-
-                let io = imgui.io_mut();
-                io.display_size = [
-                    size.width as f32 / scale,
-                    size.height as f32 / scale,
-                ];
-
-                let ui = imgui.frame();
-
-
-                ui.window("Azer Core")
-                    .size([300.0, 100.0], Condition::FirstUseEver)
-                    .build(|| {
-                        ui.color_edit4("Clear Color", clear_color);
-                    });
-
-                layer_stack.iter_mut().for_each(|layer| {
-                    layer.on_imgui_render(ui);
-                });
-
-                let draw_data = imgui.render();
-
-                vulkan.submit(renderer, layer_stack, *clear_color, map, imgui_renderer, draw_data);
+                vulkan.submit(renderer, layer_stack, *clear_color, map);
             },
             WindowEvent::Resized(_size) => {
                 vulkan.dirty.insert(RenderDirty::SWAPCHAIN);
@@ -229,13 +163,6 @@ impl ApplicationHandler for Application {
             event: &event,
             handled: false
         };
-
-        // 处理 ImGui 事件
-        ui::imgui_winit_support::handle_event(imgui, &mut wrapped_event);
-
-        if wrapped_event.handled {
-            return;
-        }
 
         // 分发给各层
         for layer in layer_stack.iter_mut().rev() {

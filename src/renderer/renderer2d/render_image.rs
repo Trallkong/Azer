@@ -23,12 +23,9 @@ pub struct ImageObject {
 
 pub struct RenderImage {
     images: HashMap<String, Ref<ImageObject>>,
-
     set_layout: Arc<DescriptorSetLayout>,
-
     memory_allocator: Arc<StandardMemoryAllocator>,
     set_allocator: Arc<StandardDescriptorSetAllocator>,
-
     sampler: Arc<Sampler>
 }
 
@@ -111,5 +108,13 @@ impl RenderImage {
 
     pub fn set_sampler(&self, img_path: &str) -> Arc<DescriptorSet> {
         self.images.get(img_path).unwrap().borrow().set.clone()
+    }
+
+    pub fn clear(&mut self) {
+        self.images.clear();
+    }
+
+    pub fn remove_image(&mut self, img_path: &str) {
+        self.images.remove(img_path);
     }
 }
